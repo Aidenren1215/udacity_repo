@@ -1,2 +1,4 @@
 # udacity_repo
-project for udacity course exercise
+git add
+git commit
+git push
