@@ -40,38 +40,60 @@ def ensure_df(state: Dict[str, Any]) -> pd.DataFrame:
     raise ValueError("No CSV found on state (expected csv_df/csv_bytes/csv_text/csv_path/uploaded_file).")
 
 
-def apply_filters(df: pd.DataFrame, filters: Optional[List[Dict[str, Any]]]) -> pd.DataFrame:
-    """根据 filters 对 DataFrame 进行筛选。filter 格式：[{column, op, value}]"""
+def apply_filters(df: pd.DataFrame, filters: Optional[List[Dict[str, Any]]] = None) -> pd.DataFrame:
     if not filters:
         return df
     out = df.copy()
+    mask_all = pd.Series(True, index=out.index)
+
     for f in filters:
         col = f.get("column")
-        op = f.get("op", "==")
+        op  = (f.get("op") or "").strip().lower()
         val = f.get("value")
         if col not in out.columns:
             raise ValueError(f"Column not found: {col}")
+
         series = out[col]
-        try:
-            left = pd.to_numeric(series, errors="coerce")
-            right = pd.to_numeric(pd.Series([val] * len(out)), errors="coerce")
-            if op == "==": mask = (left == right)
-            elif op == "!=": mask = (left != right)
-            elif op == ">": mask = (left > right)
-            elif op == "<": mask = (left < right)
-            elif op == ">=": mask = (left >= right)
-            elif op == "<=": mask = (left <= right)
-            else: raise ValueError("op must be one of ==, !=, >, <, >=, <=")
-            if mask.isna().all():
-                raise Exception("numeric compare failed")
-        except Exception:
-            s = series.astype(str).str.lower()
-            rv = str(val).lower()
-            if op == "==": mask = (s == rv)
-            elif op == "!=": mask = (s != rv)
-            else: raise ValueError("Only == or != supported for string comparison")
-        out = out[mask]
-    return out
+        left  = pd.to_numeric(series, errors="coerce")
+        if isinstance(val, (list, tuple, np.ndarray, pd.Series)):
+            right = pd.to_numeric(pd.Series(val, index=out.index), errors="coerce")
+        else:
+            right = pd.to_numeric(pd.Series([val]*len(out), index=out.index), errors="coerce")
+
+        can_numeric = left.notna().any() and right.notna().any()
+        if can_numeric and op in {"<","<="," >",">=","==","!="}:
+            mask = {
+                "<":  left <  right,
+                "<=": left <= right,
+                ">":  left >  right,
+                ">=": left >= right,
+                "==": left == right,
+                "!=": left != right,
+            }[op]
+        else:
+            s = series.astype(str).str.strip().str.lower()
+            if isinstance(val, (list, tuple, set)):
+                vals = [str(v).strip().lower() for v in val]
+                if   op in {"in","isin","=="}:   mask = s.isin(vals)
+                elif op in {"not in","notin","!="}: mask = ~s.isin(vals)
+                else: raise ValueError("string op must be in/isin/==/!= for list-like values")
+            else:
+                rv = str(val).strip().lower()
+                if   op == "contains":          # 如需“包含”，显式用 contains
+                    mask = s.str.contains(re.escape(rv), na=False)
+                elif op == "==":
+                    mask = (s == rv)
+                elif op == "!=":
+                    mask = (s != rv)
+                elif op in {"<","<=",">",">="}: # 字典序比较（少用）
+                    mask = eval(f"s {op} rv")
+                else:
+                    raise ValueError("string op must be one of contains/==/!=/<,<=,>,>=")
+
+        mask_all &= mask.fillna(False)
+
+    return out.loc[mask_all]
+
 
 
 def normalize_col(s: str) -> str:
