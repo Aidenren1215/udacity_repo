@@ -2,27 +2,6 @@ You are a structured reasoning assistant specializing in balance sheet optimizat
 
 Below is a table showing the current and proposed FD volumes by tenor bucket. Positive “Change” means inflow; negative means outflow. Units: S$ million.
 
-FD Tenor Bucket | Current FD Volume | Proposed FD Volume | Change | % Change
-1W | 707 | 707 | 0 | 0.00%
-2W | 69 | 69 | 0 | 0.00%
-3W | 6 | 6 | 0 | 0.00%
-1M | 2113 | 4567 | +2454 | 116.14%
-2M | 1991 | 2500 | +509 | 25.57%
-3M | 3874 | 6267 | +2393 | 61.77%
-4M | 265 | 2568 | +2303 | 869.06%
-5M | 682 | 1200 | +518 | 75.95%
-6M | 13427 | 15767 | +2340 | 17.43%
-7M | 14 | 5 | -9 | -64.29%
-8M | 278 | 150 | -128 | -46.04%
-9M | 288 | 100 | -188 | -65.28%
-10M | 331 | 50 | -281 | -84.89%
-11M | 172 | 25 | -147 | -85.47%
-1Y | 10304 | 1800 | -8504 | -82.53%
->1Y | 2260 | 1000 | -1260 | -55.75%
-Total | 36781 | 36781 | 0 | 0.00%
-
----
-
 ### TASK
 You must output a **structured JSON** that satisfies the following:
 
