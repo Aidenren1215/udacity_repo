@@ -1,84 +1,104 @@
-async def run_chatbot(user_input: str):
-    # 保留你的配置
-    st.session_state.thread['configurable']['planner_model'] = planner_model
-    st.session_state.thread['configurable']['base_url'] = model_dict[planner_model]
-    st.session_state.thread['configurable']['model_temp'] = temp
-    st.session_state.thread['configurable']['vector_store'] = vector_store
+import asyncio
 
-    async for event in st.session_state.graph.astream(
+async def run_chatbot(user_input: str):
+    # 你原来就有的这几行配置写回 thread，不动
+    st.session_state.thread["configurable"]["planner_model"] = planner_model
+    st.session_state.thread["configurable"]["base_url"] = model_dict[planner_model]
+    st.session_state.thread["configurable"]["model_temp"] = temp
+    st.session_state.thread["configurable"]["vector_store"] = vector_store
+
+    agen = st.session_state.graph.astream(
         {"query": user_input, "maturity_bytes": maturity_bytes},
         st.session_state.thread,
         stream_mode="updates",
-    ):
-        # ---------- 捕获 interrupt ----------
-        if "__interrupt__" in event:
-            # 你的环境返回 Interrupt 对象，用 .value 没问题
-            msg = event["__interrupt__"][-1].value
-            st.session_state.pending_interrupt = True
-            st.session_state.interrupt_message = msg
-            return  # 不 yield，交给按钮区展示
-        # ---------- 正常消息 ----------
-        display = None
-        if "fd_monthly_agent" in event and event["fd_monthly_agent"].get("bso_messages"):
-            display = event["fd_monthly_agent"]["bso_messages"][-1].content
-        elif "fd_proposer" in event and event["fd_proposer"].get("messages"):
-            display = event["fd_proposer"]["messages"][-1].content
-        elif "bso_agent" in event and event["bso_agent"].get("bso_messages"):
-            display = event["bso_agent"]["bso_messages"][-1].content
-        elif "calc_llm_agent" in event and event["calc_llm_agent"].get("messages"):
-            display = event["calc_llm_agent"]["messages"][-1].content
+    )
 
-        if display is not None:
-            yield display
+    try:
+        async for event in agen:
+            # -------- 1) 本轮可显示的内容（先渲染） --------
+            display = None
+            if "fd_monthly_proposer" in event and event["fd_monthly_proposer"].get("fd_monthly_messages"):
+                display = event["fd_monthly_proposer"]["fd_monthly_messages"][-1].content
+            elif "fd_proposer" in event and event["fd_proposer"].get("fd_messages"):
+                display = event["fd_proposer"]["fd_messages"][-1].content
+            elif "bso_agent" in event and event["bso_agent"].get("bso_messages"):
+                display = event["bso_agent"]["bso_messages"][-1].content
+
+            if display is not None:
+                st.session_state.chatbot_mode = True
+                st.session_state.thread["configurable"]["agent_messages"].append(display)
+                st.session_state.history.append(("assistant", display))
+                yield display
+
+            # -------- 2) 中断（后处理，改 return 为 break） --------
+            if "__interrupt__" in event:
+                msg = event["__interrupt__"][-1].value  # 你现在环境下 .value 可用
+                st.session_state.pending_interrupt = True
+                st.session_state.interrupt_message = msg
+                break  # 不要 return，给 finally 机会 aclose()
+
+        else:
+            # 没有新的中断，清理挂起态
+            st.session_state.pending_interrupt = False
+            st.session_state.interrupt_message = ""
+
+    except asyncio.CancelledError:
+        raise
+    finally:
+        try:
+            await agen.aclose()
+        except Exception:
+            pass
 
 
+import asyncio
+from langgraph.types import Command
 
-async def resume_chatbot(decision: str):
-    """恢复 bso_confirm 的中断。decision ∈ {'proceed','redo'}"""
-    from langgraph.types import Command
+async def resume_chatbot(decision: str, feedback: str = ""):
+    """从 bso_confirm / fd_confirm 恢复。decision ∈ {'proceed','retry','retry_bso','retry_fd'...}"""
+    payload = {"value": decision}
+    if feedback:
+        payload["feedback"] = feedback
 
-    async for event in st.session_state.graph.astream(
-        Command(resume={"value": decision}),
+    agen = st.session_state.graph.astream(
+        Command(resume=payload),
         st.session_state.thread,
         stream_mode="updates",
-    ):
-        # ---------- 再次中断 ----------
-        if "__interrupt__" in event:
-            msg = event["__interrupt__"][-1].value
-            st.session_state.pending_interrupt = True
-            st.session_state.interrupt_message = msg
-            return
-        # ---------- 正常消息 ----------
-        display = None
-        if "fd_monthly_agent" in event and event["fd_monthly_agent"].get("bso_messages"):
-            display = event["fd_monthly_agent"]["bso_messages"][-1].content
-        elif "fd_proposer" in event and event["fd_proposer"].get("messages"):
-            display = event["fd_proposer"]["messages"][-1].content
-        elif "bso_agent" in event and event["bso_agent"].get("bso_messages"):
-            display = event["bso_agent"]["bso_messages"][-1].content
-        elif "calc_llm_agent" in event and event["calc_llm_agent"].get("messages"):
-            display = event["calc_llm_agent"]["messages"][-1].content
+    )
 
-        if display is not None:
-            yield display
+    try:
+        async for event in agen:
+            # -------- 1) 本轮输出（先渲染） --------
+            display = None
+            if "fd_monthly_proposer" in event and event["fd_monthly_proposer"].get("fd_monthly_messages"):
+                display = event["fd_monthly_proposer"]["fd_monthly_messages"][-1].content
+            elif "fd_proposer" in event and event["fd_proposer"].get("fd_messages"):
+                display = event["fd_proposer"]["fd_messages"][-1].content
+            elif "bso_agent" in event and event["bso_agent"].get("bso_messages"):
+                display = event["bso_agent"]["bso_messages"][-1].content
 
-    # 收尾清理中断状态
-    st.session_state.pending_interrupt = False
-    st.session_state.interrupt_message = ""
+            if display is not None:
+                st.session_state.chatbot_mode = True
+                st.session_state.thread["configurable"]["agent_messages"].append(display)
+                st.session_state.history.append(("assistant", display))
+                yield display
 
+            # -------- 2) 新的中断（后处理，break 不 return） --------
+            if "__interrupt__" in event:
+                msg = event["__interrupt__"][-1].value  # 只读 .value
+                st.session_state.pending_interrupt = True
+                st.session_state.interrupt_message = msg
+                break
 
+        else:
+            # 整段恢复没有中断，清理挂起态
+            st.session_state.pending_interrupt = False
+            st.session_state.interrupt_message = ""
 
-
-# === BSO 确认 UI ===
-if st.session_state.get("pending_interrupt"):
-    st.markdown(st.session_state.get("interrupt_message", ""))
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("✅ proceed", use_container_width=True):
-            with st.chat_message("assistant"):
-                st.write_stream(resume_chatbot("proceed"))
-    with col2:
-        if st.button("🔁 retry", use_container_width=True):
-            with st.chat_message("assistant"):
-                st.write_stream(resume_chatbot("redo"))
+    except asyncio.CancelledError:
+        raise
+    finally:
+        try:
+            await agen.aclose()
+        except Exception:
+            pass
