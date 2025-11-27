@@ -1,45 +1,3 @@
-import os
-import json
-import uuid
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Iterator
-
-import httpx
-from leann import LeannBuilder, LeannSearcher
-
-
-def configure_leann_openai(
-    base_url: str,
-    api_key: str = "dummy",
-    disable_ssl_verify: bool = True,
-) -> None:
-    """
-    配置 LEANN 使用的 OpenAI-兼容内部 API。
-    - 会设置 OPENAI_BASE_URL / OPENAI_API_KEY 环境变量
-    - 可选：全局 monkey-patch httpx.Client，让 verify=False
-    必须在第一次使用 LeannVectorDB / LeannBuilder 之前调用一次。
-    """
-    os.environ["OPENAI_BASE_URL"] = base_url
-    os.environ["OPENAI_API_KEY"] = api_key
-
-    if disable_ssl_verify:
-        # 全局 patch httpx.Client 默认 verify=False（你那边自签证书必须关验证）
-        if not getattr(httpx.Client, "_leann_ocbc_patched", False):
-            original_init = httpx.Client.__init__
-
-            def _patched_init(self, *args, **kwargs):
-                # 调用方如果显式写了 verify，就尊重；否则默认 False
-                kwargs.setdefault("verify", False)
-                return original_init(self, *args, **kwargs)
-
-            httpx.Client.__init__ = _patched_init
-            httpx.Client._leann_ocbc_patched = True
-
-        print("[configure_leann_openai] httpx.Client patched with verify=False")
-
-    print("[configure_leann_openai] OPENAI_BASE_URL =", os.environ.get("OPENAI_BASE_URL"))
-
-
 class LeannVectorDB:
     """
     一个简单的 LEANN 封装，把单个 .leann 文件当成一个“collection”。
@@ -61,15 +19,25 @@ class LeannVectorDB:
         self,
         index_path: str,
         backend_name: str = "hnsw",
-        embedding_mode: str = "openai",
-        embedding_model: str = "bge-large-en-v1.5",
+        # === CHANGED: 默认使用本地 sentence-transformers + BGE ===
+        embedding_mode: str = "sentence-transformers",      # 原来是 "openai"
+        embedding_model: str = "BAAI/bge-large-en-v1.5",    # 原来是 "bge-large-en-v1.5"
         store_path: Optional[str] = None,
+        # === NEW: 暴露 LEANN 构建索引的关键参数，方便调优 ===
+        graph_degree: int = 32,         # hnsw 图的度（对应 CLI 的 --graph-degree）
+        build_complexity: int = 64,     # 构建复杂度（对应 CLI 的 --build-complexity / complexity）
+        is_compact: bool = True,        # 是否启用紧凑存储
+        is_recompute: bool = True,      # 是否支持重算（on-the-fly embedding）
+        num_threads: int = 1,           # 构建用的 CPU 线程数
     ):
         """
         :param index_path:   LEANN 索引文件路径，例如 "fd_docs.leann"
         :param backend_name: LEANN backend，一般用 "hnsw" 或 "diskann"
-        :param embedding_mode:   LEANN embedding backend，例如 "openai"
-        :param embedding_model:  使用的 embedding 模型名（供 LEANN 内部调用）
+        :param embedding_mode:   嵌入后端：
+                                 - "sentence-transformers": 本地 HF/BGE 等
+                                 - "openai": 调 OpenAI / OpenAI 兼容 API
+                                 - "mlx" / "ollama" 等（看 LEANN 文档）
+        :param embedding_model:  嵌入模型名称，例如 "BAAI/bge-large-en-v1.5"
         :param store_path:   文档存储 JSONL 路径（默认 = index_path + ".store.jsonl"）
         """
         self.index_path = Path(index_path)
@@ -77,13 +45,22 @@ class LeannVectorDB:
 
         if store_path is None:
             # 单独的文档存储文件，避免和 LEANN 自己的 meta / passages 冲突
-            self.store_path = self.index_path.with_suffix(self.index_path.suffix + ".store.jsonl")
+            self.store_path = self.index_path.with_suffix(
+                self.index_path.suffix + ".store.jsonl"
+            )
         else:
             self.store_path = Path(store_path)
 
         self.backend_name = backend_name
         self.embedding_mode = embedding_mode
         self.embedding_model = embedding_model
+
+        # === NEW: 保存索引构建相关参数 ===
+        self.graph_degree = graph_degree
+        self.build_complexity = build_complexity
+        self.is_compact = is_compact
+        self.is_recompute = is_recompute
+        self.num_threads = num_threads
 
         self._searcher: Optional[LeannSearcher] = None
 
@@ -118,12 +95,18 @@ class LeannVectorDB:
         if self._searcher is None:
             if not self.index_path.exists():
                 raise RuntimeError(f"Index file does not exist: {self.index_path}")
+            # 这里不需要传 embedding_model，LEANN 会从 .meta.json 里读取
             self._searcher = LeannSearcher(str(self.index_path))
         return self._searcher
 
     # ================ 对外 API：add / add_many / delete / rebuild_index / search ================
 
-    def add(self, text: str, metadata: Optional[Dict[str, Any]] = None, doc_id: Optional[str] = None) -> str:
+    def add(
+        self,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        doc_id: Optional[str] = None,
+    ) -> str:
         """
         单条新增（只写入 store.jsonl，不会立刻更新索引，需要之后调用 rebuild_index）。
 
@@ -220,13 +203,21 @@ class LeannVectorDB:
             self._invalidate_searcher()
             return
 
+        # === CHANGED: 显式传入本地 BGE 相关配置和 HNSW 参数 ===
         builder = LeannBuilder(
             backend_name=self.backend_name,
-            embedding_mode=self.embedding_mode,
-            embedding_model=self.embedding_model,
+            embedding_mode=self.embedding_mode,        # 本地 -> sentence-transformers
+            embedding_model=self.embedding_model,      # 本地 BGE 模型名
+            graph_degree=self.graph_degree,            # NEW
+            complexity=self.build_complexity,          # NEW：参数名叫 complexity
+            is_compact=self.is_compact,                # NEW
+            is_recompute=self.is_recompute,            # NEW
+            num_threads=self.num_threads,              # NEW
         )
 
         for r in active_records:
+            # 这里也可以顺手把 metadata 传进去做 metadata filter 用：
+            # builder.add_text(r["text"], metadata=r.get("metadata", {}))
             builder.add_text(r["text"])
 
         # 覆盖写索引文件
@@ -273,44 +264,3 @@ class LeannVectorDB:
             )
 
         return parsed
-
-
-
-from leann_vector_db import configure_leann_openai, LeannVectorDB
-
-# 1) 先配置内部 LLM 网关 + 关闭 SSL 校验
-configure_leann_openai(
-    base_url="https://ocbc-llm-coordinator.xxx.apps.prod.ocbc.com",
-    api_key="dummy-or-real",
-)
-
-# 2) 创建一个 "collection"（本质是一个 .leann + 一个 .store.jsonl）
-db = LeannVectorDB(
-    index_path="fd_docs.leann",
-    backend_name="hnsw",
-    embedding_mode="openai",
-    embedding_model="bge-large-en-v1.5",
-)
-
-# 3) 批量 add 文本（比如已经完成 chunking 的结果）
-texts = [
-    "This chunk explains 6M vs 12M fixed deposit optimisation.",
-    "This chunk explains FTP curves and internal transfer pricing.",
-]
-metas = [
-    {"source": "fd_policy.pdf", "section": "tenor"},
-    {"source": "ftp_guide.pdf", "section": "intro"},
-]
-doc_ids = db.add_many(texts, metadatas=metas)
-
-# 4) 重建索引（仅在你完成一批 add/delete 后需要跑一次）
-db.rebuild_index()
-
-# 5) 搜索
-res = db.search("how to optimise fixed deposits", top_k=3)
-for r in res:
-    print(r["score"], r["text"])
-
-# 6) 删除一条，然后再重建一次索引
-db.delete(doc_ids[0])
-db.rebuild_index()
