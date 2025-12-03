@@ -242,3 +242,38 @@ class LeannVectorDB:
             )
 
         return parsed
+    
+    
+    def drop_index(self, delete_store: bool = False) -> None:
+        """
+        Delete the entire LEANN index on disk.
+
+        This will:
+        - Remove the main .leann index file
+        - Remove the metadata file (.leann.meta.json or .leann.meta)
+        - Optionally remove the store.jsonl document store
+
+        After dropping:
+        - search() will no longer work until rebuild_index() is called
+        - add() still works (appends to store.jsonl)
+        """
+        # ----- Delete the index file -----
+        if self.index_path.exists():
+            self.index_path.unlink()
+
+        # ----- Delete meta.json (current LEANN index format) -----
+        meta_json = self.index_path.with_suffix(self.index_path.suffix + ".meta.json")
+        if meta_json.exists():
+            meta_json.unlink()
+
+        # ----- Delete meta (older LEANN version) -----
+        meta_plain = self.index_path.with_suffix(self.index_path.suffix + ".meta")
+        if meta_plain.exists():
+            meta_plain.unlink()
+
+        # ----- Optionally delete store.jsonl -----
+        if delete_store and self.store_path.exists():
+            self.store_path.unlink()
+
+        # Invalidate searcher
+        self._invalidate_searcher()
