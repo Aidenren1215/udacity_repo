@@ -10,6 +10,51 @@ Units: S$ million.
 
 ---
 
+
+3. **FD table is a hard constraint**
+   - The `current` and `proposed` volumes for each real tenor bucket are fixed
+   - For every real bucket `b`:
+     ```
+     inflow_b - outflow_b == (proposed_b - current_b)
+     ```
+   - The net external requirement is fixed:
+     ```
+     net_change = total_proposed - total_current
+     external_in_total - external_out_total == net_change
+     ```
+   - These quantities MUST NOT be changed by user feedback
+
+---
+
+### USER FEEDBACK (Optional)
+
+The user may provide feedback to refine the **reallocation_plan only**.
+
+User feedback MUST be treated as **additional routing or decomposition constraints**
+and MUST NOT redefine the target FD volumes.
+
+Allowed feedback (examples):
+- Adjusting how flows are decomposed or routed  
+  (e.g. “allocate more internal flow from longer tenors”)
+- Changing how EXTERNAL inflow is distributed across positive-change buckets
+- Reducing unnecessary fragmentation of flows while preserving feasibility
+
+Invalid feedback (must NOT be applied):
+- Any request that implies changing any `proposed` volume in the FD table  
+  (e.g. “reduce 1Y outflow” when 1Y proposed is fixed)
+- Any request that implies changing `net_change`
+- Any request that violates bucket-level or global validation rules
+
+If feedback is partially or fully infeasible:
+- Keep all FD table targets unchanged
+- Apply the feasible parts only
+- Briefly explain the resolution in `summary_markdown`
+
+User feedback (if any):
+
+{user_feedback}
+
+
 ### IMPORTANT MODELING RULES
 
 1. **Total FD volume is NOT guaranteed to be conserved**
