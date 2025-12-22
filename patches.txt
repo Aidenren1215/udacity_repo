@@ -1,0 +1,10 @@
+- **No bidirectional EXTERNAL flows (net-only external)**
+  - Let `net_change = total_proposed - total_current`
+  - If `net_change > 0`:
+    - You MUST use `"external_in"` movements (from `"EXTERNAL"` to real buckets)
+    - You MUST NOT include any `"external_out"` movements (real buckets to `"EXTERNAL"`)
+  - If `net_change < 0`:
+    - You MUST use `"external_out"` movements (real buckets to `"EXTERNAL"`)
+    - You MUST NOT include any `"external_in"` movements (from `"EXTERNAL"` to real buckets)
+  - If `net_change == 0`:
+    - Prefer no EXTERNAL movements at all; use internal movements only
