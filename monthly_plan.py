@@ -1,4 +1,4 @@
-from typing import List, Dict, Literal
+from typing import List, Literal
 from pydantic import BaseModel, Field
 
 
@@ -10,22 +10,33 @@ class MonthlyReallocationRecord(BaseModel):
     movement_type: Literal["internal", "external_in", "external_out"]
 
 
-class MonthlyBucketCheck(BaseModel):
-    capacity: float
-    outflow: float
-    slack: float
+class BucketLevelCheck(BaseModel):
+    bucket: str
+
+    general_outflow: float
+    monthly_outflow: float
+    outflow_diff: float
+
+    general_inflow: float
+    monthly_inflow: float
+    inflow_diff: float
+
     status: Literal["OK", "MISMATCH"]
+
+
+class ExternalNetCheck(BaseModel):
+    general_net: float
+    monthly_net: float
+    diff: float
 
 
 class MonthlyGlobalValidation(BaseModel):
     status: Literal["OK", "MISMATCH"]
-    edge_total_mismatches: List[str]
-    external_in_total: float
-    external_out_total: float
+    bucket_checks: List[BucketLevelCheck]
+    external_net_check: ExternalNetCheck
 
 
 class MonthlyFDPlan(BaseModel):
     summary_markdown: str
     reallocation_plan: List[MonthlyReallocationRecord]
-    bucket_validation: Dict[str, MonthlyBucketCheck]
     global_validation: MonthlyGlobalValidation
