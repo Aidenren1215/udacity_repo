@@ -36,3 +36,44 @@ class FDPlan(BaseModel):
     reallocation_plan: List[ReallocationRecord]
     bucket_validation: Dict[str, BucketCheck]
     global_validation: GlobalValidation
+    
+    
+    
+    
+    
+from typing import List, Literal
+from pydantic import BaseModel, Field
+from langchain_core.output_parsers import JsonOutputParser
+
+MovementType = Literal["internal", "external_in", "external_out"]
+
+class ReallocationRecord(BaseModel):
+    month: str = Field(..., description='Month in "Mon-YY" format, e.g. Jan-24')
+    from_bucket: str
+    to_bucket: str
+    amount: float
+    movement_type: MovementType
+
+class ExternalNetCheck(BaseModel):
+    net_external_general: float
+    net_external_monthly: float
+
+class GlobalValidation(BaseModel):
+    status: Literal["OK", "MISMATCH"]
+    bucket_mismatches: List[str] = Field(default_factory=list)
+    external_net_check: ExternalNetCheck
+
+class MonthlyFDTableRow(BaseModel):
+    month: str = Field(..., description='Month in "Mon-YY" format, e.g. Jan-24')
+    tenor_bucket: str
+    current_balance: float
+    proposed_balance: float
+
+class MonthlyShiftWithFDTableResult(BaseModel):
+    summary_markdown: str = Field(..., description="Markdown bullets only. No chain-of-thought.")
+    reallocation_plan: List[ReallocationRecord]
+    global_validation: GlobalValidation
+    monthly_fd_table: List[MonthlyFDTableRow]
+
+parser = JsonOutputParser(pydantic_object=MonthlyShiftWithFDTableResult)
+format_instructions = parser.get_format_instructions()
