@@ -1,0 +1,24 @@
+3. **NO CIRCULAR FLOW / NET FLOW ONLY (Hard Constraint)**
+   The reallocation_plan MUST represent **net flows** only and MUST NOT contain
+   any circular, relay, or canceling movements.
+
+   Strictly forbidden patterns include (but are not limited to):
+   - Any cycle across real buckets, e.g. A → B and B → A (direct 2-cycle)
+   - Longer cycles, e.g. A → B, B → C, C → A
+   - Any “relay flow” where external inflow is immediately routed onward,
+     e.g. EXTERNAL → X and X → Y in the same plan (this is a relay via X)
+   - Any canceling pair, e.g. A → B and B → A both appear (must be netted)
+   - Any bucket acting as both a significant inbound and outbound transit node
+     without that being required by its own net change (i.e., avoid pass-through)
+
+   Implementation requirement (must be applied before final output):
+   - If both A → B and B → A would exist, NET them into a single direction:
+       net = |flow(A→B) - flow(B→A)|
+     and keep only the remaining direction with positive amount.
+   - More generally, the final plan should be interpretable as net transfers that
+     satisfy bucket-level changes, not as a multi-step routing network.
+
+   Practical guidance:
+   - Prefer direct internal moves from negative-change buckets to positive-change buckets.
+   - Prefer allocating external_in directly into positive-change buckets.
+   - Prefer allocating external_out directly from negative-change buckets.
