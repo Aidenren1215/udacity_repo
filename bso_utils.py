@@ -103,3 +103,113 @@ def build_matured_balance_matrix(
 # display(matured_mat.head())
 # print(matured_mat.index[:5])
 # print(matured_mat.columns[:10])
+
+
+import pandas as pd
+
+def build_inflow_outflow_matrices(
+    matured_mat: pd.DataFrame,
+    shift_df: pd.DataFrame,
+    month_col: str = "month",
+    from_col: str = "from_bucket",
+    to_col: str = "to_bucket",
+    amt_col: str = "amount",
+    external_bucket: str = "EXTERNAL",
+    strict: bool = True,
+    enforce_unique_edge_per_month: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build outflow_mat and inflow_mat with the same shape as matured_mat.
+
+    outflow_mat[m,b] = sum(amount) where month=m and from_bucket=b (b is real tenor)
+    inflow_mat[m,b]  = sum(amount) where month=m and to_bucket=b  (b is real tenor)
+
+    Assumptions (per your confirmation):
+    - For any (month, from_bucket, to_bucket), shift_df contains at most ONE row.
+      If enforce_unique_edge_per_month=True, we validate and raise on duplicates.
+    """
+    months = list(matured_mat.index.astype(str))
+    tenors = list(matured_mat.columns.astype(str))
+
+    df = shift_df.copy()
+    df[month_col] = df[month_col].astype(str).str.strip()
+    df[from_col] = df[from_col].astype(str).str.strip()
+    df[to_col] = df[to_col].astype(str).str.strip()
+    df[amt_col] = pd.to_numeric(df[amt_col], errors="coerce").fillna(0.0)
+
+    # Keep only positive movements
+    df = df[df[amt_col] > 0].copy()
+
+    # --- uniqueness check (your data promise) ---
+    if enforce_unique_edge_per_month:
+        dup = df.duplicated(subset=[month_col, from_col, to_col], keep=False)
+        if dup.any():
+            examples = (
+                df.loc[dup, [month_col, from_col, to_col, amt_col]]
+                .sort_values([month_col, from_col, to_col])
+                .head(10)
+                .to_dict("records")
+            )
+            raise ValueError(
+                "Found duplicate (month, from_bucket, to_bucket) rows in shift plan. "
+                f"Examples: {examples}"
+            )
+
+    # --- strict validation: unknown months/tenors ---
+    if strict:
+        unknown_months = sorted(set(df[month_col].unique()) - set(months))
+        if unknown_months:
+            raise ValueError(f"Shift plan contains months not in maturity ladder: {unknown_months}")
+
+        bad_from = sorted(set(df[df[from_col] != external_bucket][from_col].unique()) - set(tenors))
+        bad_to = sorted(set(df[df[to_col] != external_bucket][to_col].unique()) - set(tenors))
+        if bad_from:
+            raise ValueError(f"Shift plan contains from_bucket not in tenor universe: {bad_from}")
+        if bad_to:
+            raise ValueError(f"Shift plan contains to_bucket not in tenor universe: {bad_to}")
+
+    # --- build outflow matrix (real tenors only) ---
+    outflow = (
+        df[df[from_col] != external_bucket]
+        .groupby([month_col, from_col], dropna=False)[amt_col]
+        .sum()
+        .unstack(from_col, fill_value=0.0)
+        .reindex(index=months, columns=tenors, fill_value=0.0)
+        .astype(float)
+    )
+
+    # --- build inflow matrix (real tenors only) ---
+    inflow = (
+        df[df[to_col] != external_bucket]
+        .groupby([month_col, to_col], dropna=False)[amt_col]
+        .sum()
+        .unstack(to_col, fill_value=0.0)
+        .reindex(index=months, columns=tenors, fill_value=0.0)
+        .astype(float)
+    )
+
+    # --- strict validation: outflow must not exceed matured capacity ---
+    if strict:
+        violation = (outflow - matured_mat) > 1e-9
+        if violation.any().any():
+            bad = []
+            for m in months:
+                for b in tenors:
+                    if violation.loc[m, b]:
+                        bad.append((m, b, float(outflow.loc[m, b]), float(matured_mat.loc[m, b])))
+                        if len(bad) >= 10:
+                            break
+                if len(bad) >= 10:
+                    break
+            raise ValueError(
+                "Shift plan outflow exceeds matured balance for some (month, tenor). "
+                f"Examples (month, tenor, outflow, matured): {bad}"
+            )
+
+    return outflow, inflow
+
+
+# ---- usage ----
+# outflow_mat, inflow_mat = build_inflow_outflow_matrices(matured_mat, shift_df, strict=True, enforce_unique_edge_per_month=True)
+# display(outflow_mat.head())
+# display(inflow_mat.head())
