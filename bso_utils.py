@@ -213,3 +213,62 @@ def build_inflow_outflow_matrices(
 # outflow_mat, inflow_mat = build_inflow_outflow_matrices(matured_mat, shift_df, strict=True, enforce_unique_edge_per_month=True)
 # display(outflow_mat.head())
 # display(inflow_mat.head())
+
+
+def compute_renewed_balance(
+    matured_mat: pd.DataFrame,
+    outflow_mat: pd.DataFrame,
+    inflow_mat: pd.DataFrame,
+    strict: bool = True,
+) -> pd.DataFrame:
+    """
+    Compute renewed_balance matrix.
+
+    renewed_balance[m,b] = matured_balance[m,b]
+                            - outflow[m,b]
+                            + inflow[m,b]
+
+    renewed_balance represents NEWLY ISSUED / RENEWED FD in that month and tenor.
+    It must be >= 0 everywhere if the shift plan is valid.
+    """
+    # Basic shape check
+    assert matured_mat.shape == outflow_mat.shape == inflow_mat.shape
+
+    renewed_mat = matured_mat - outflow_mat + inflow_mat
+
+    if strict:
+        # renewed balance must be non-negative
+        neg = renewed_mat < -1e-9
+        if neg.any().any():
+            bad = []
+            for m in renewed_mat.index:
+                for b in renewed_mat.columns:
+                    if neg.loc[m, b]:
+                        bad.append(
+                            (
+                                m,
+                                b,
+                                float(matured_mat.loc[m, b]),
+                                float(outflow_mat.loc[m, b]),
+                                float(inflow_mat.loc[m, b]),
+                                float(renewed_mat.loc[m, b]),
+                            )
+                        )
+                        if len(bad) >= 10:
+                            break
+                if len(bad) >= 10:
+                    break
+
+            raise ValueError(
+                "Renewed balance is negative for some (month, tenor). "
+                "This indicates an invalid monthly shift plan.\n"
+                "Examples (month, tenor, matured, outflow, inflow, renewed): "
+                f"{bad}"
+            )
+
+    return renewed_mat
+
+
+# ---- usage ----
+# renewed_mat = compute_renewed_balance(matured_mat, outflow_mat, inflow_mat, strict=True)
+# display(renewed_mat.head())
