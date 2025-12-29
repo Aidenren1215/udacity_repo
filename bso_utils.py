@@ -328,3 +328,46 @@ def compute_rollover_balance_h12(
                 k += 1
 
     return rollover_mat, months_h
+
+
+def build_monthly_fd_table_h12(
+    matured_mat: pd.DataFrame,
+    renewed_mat: pd.DataFrame,
+    rollover_mat_h12: pd.DataFrame,
+    months_h: list[str],
+) -> pd.DataFrame:
+    """
+    Build final Monthly FD Table (12-month horizon).
+
+    Output columns:
+      - month
+      - tenor_bucket
+      - current_balance   = matured_balance + rollover_balance
+      - proposed_balance  = rollover_balance + renewed_balance
+
+    Notes:
+      - rollover_balance is DISPLAY ONLY
+      - renewed_balance is the shift result on matured
+      - EXTERNAL is NOT included
+    """
+    tenors = list(matured_mat.columns.astype(str))
+
+    # Align all matrices to the same 12-month horizon
+    matured_h = matured_mat.reindex(index=months_h, columns=tenors, fill_value=0.0).astype(float)
+    renewed_h = renewed_mat.reindex(index=months_h, columns=tenors, fill_value=0.0).astype(float)
+    rollover_h = rollover_mat_h12.reindex(index=months_h, columns=tenors, fill_value=0.0).astype(float)
+
+    current_h = matured_h + rollover_h
+    proposed_h = rollover_h + renewed_h
+
+    # Long-form output
+    out = pd.DataFrame(
+        {
+            "month": np.repeat(months_h, len(tenors)),
+            "tenor_bucket": tenors * len(months_h),
+            "current_balance": current_h.to_numpy().reshape(-1),
+            "proposed_balance": proposed_h.to_numpy().reshape(-1),
+        }
+    )
+
+    return out
