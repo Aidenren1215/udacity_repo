@@ -272,3 +272,59 @@ def compute_renewed_balance(
 # ---- usage ----
 # renewed_mat = compute_renewed_balance(matured_mat, outflow_mat, inflow_mat, strict=True)
 # display(renewed_mat.head())
+
+
+import pandas as pd
+
+def compute_rollover_balance_h12(
+    renewed_mat: pd.DataFrame,
+    horizon_months: int = 12,
+) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Step 5 (agreed logic): compute rollover_balance within a 12-month horizon.
+
+    - Month horizon comes from the month index of renewed_mat (which in turn comes
+      from monthly maturity data). If earliest month is Jan-24 and horizon_months=12,
+      we compute/return rollover for Jan-24 .. Dec-24 only.
+
+    - Rollover rule (REPEATED rollover):
+        For each tenor bucket b with frequency freq(b) in months,
+        renewed_balance[t,b] rolls into months:
+            t+freq, t+2*freq, t+3*freq, ...
+        as long as those target months are within the horizon window.
+
+      Example: Jan-24 3M rolls into Apr-24, Jul-24, Oct-24 (within Jan..Dec).
+      1W/2W/3W map to freq=1 (monthly rollover).
+    """
+    months_all = list(renewed_mat.index.astype(str))
+    tenors = list(renewed_mat.columns.astype(str))
+
+    months_h = months_all[:horizon_months]
+    H = len(months_h)
+
+    rollover_mat = pd.DataFrame(0.0, index=months_h, columns=tenors)
+
+    # Index mapping inside horizon
+    month_to_i = {m: i for i, m in enumerate(months_h)}
+
+    for b in tenors:
+        freq = tenor_to_months(b)  # uses your confirmed mapping
+        if freq <= 0:
+            # defensive fallback (shouldn't happen for your tenor set)
+            continue
+
+        for t in months_h:
+            x = float(renewed_mat.loc[t, b])
+            if x == 0.0:
+                continue
+
+            ti = month_to_i[t]
+            k = 1
+            while True:
+                j = ti + k * freq
+                if j >= H:
+                    break
+                rollover_mat.iat[j, rollover_mat.columns.get_loc(b)] += x
+                k += 1
+
+    return rollover_mat, months_h
