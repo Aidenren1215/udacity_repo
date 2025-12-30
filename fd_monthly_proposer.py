@@ -247,3 +247,13 @@ print(mism)
 viol = check_step3_capacity(monthly_plan_df, capacity_mat.iloc[:12])
 print("capacity violations:")
 print(viol)
+
+
+
+monthly_plan_df, diagnostics = build_monthly_baseline_plan_step3(
+    general_shift_plan_df=general_shift_plan_df,
+    capacity_mat=capacity_mat_12m,
+    weights_mat=weights_mat_12m,
+    month_order=list(capacity_mat_12m.index),  # 保证按 Jan-24 → ...
+    infeasible_tol=0.5,                        # 可选
+)
