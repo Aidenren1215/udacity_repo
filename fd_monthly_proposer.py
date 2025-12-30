@@ -14,26 +14,23 @@ def _split_total_by_weights(total: float, w: pd.Series, round_dp: int = 6) -> pd
     if len(months) == 1:
         return pd.Series([float(total)], index=months, dtype=float)
 
-    # normalize w defensively (in case of tiny float drift)
     s = float(w.sum())
     if s <= 0:
         w = _uniform_weights(months)
     else:
-        w = (w / s)
+        w = w / s
 
     x = (total * w).round(round_dp)
-    # residual to last month to ensure sum equals total exactly
     resid = float(total) - float(x.iloc[:-1].sum())
     x.iloc[-1] = round(resid, round_dp)
 
-    # drop -0.0
-    x = x.where(x.abs() > 0, 0.0)
+    x = x.where(x.abs() > 0, 0.0)  # drop -0.0
     return x
 
 def build_monthly_baseline_plan_step3(
     general_shift_plan_df: pd.DataFrame,
     capacity_mat: pd.DataFrame,     # index=month (Mon-YY), columns=buckets
-    weights_mat: pd.DataFrame,      # same index/cols as capacity_mat
+    weights_mat: pd.DataFrame,      # used for internal/external_out (from_bucket weights)
     month_order: Optional[List[str]] = None,  # if None use capacity_mat.index
     from_col: str = "from_bucket",
     to_col: str = "to_bucket",
@@ -41,21 +38,16 @@ def build_monthly_baseline_plan_step3(
     amt_col: str = "amount",
     external_bucket: str = "EXTERNAL",
     round_dp: int = 6,
-    fallback_for_external_in: str = "uniform",  # "uniform" only for now
+    infeasible_tol: float = 0.0,    # allow small mismatch in feasibility check if needed
 ) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Step 3 (baseline):
-    - For each general edge (from,to,type,amount), split amount across months.
-    - internal & external_out (real -> *): split using weights of from_bucket.
-    - external_in (EXTERNAL -> real): split using weights of to_bucket; if to_bucket has zero maturity => fallback.
-    - Feasibility check for real from_buckets:
-        total_outflow(from_bucket) <= sum_m capacity[from_bucket]
-      If any violated, return empty df + diagnostics.
-
-    Returns:
-      monthly_plan_df: columns [month, from_bucket, to_bucket, movement_type, amount]
-      diagnostics: empty if OK, else reasons keyed by bucket or "GLOBAL"
+    - internal & external_out (real -> *): split using weights of from_bucket (weights_mat).
+    - external_in (EXTERNAL -> real): split using GLOBAL maturity weights:
+        w_ext[m] ∝ sum_b capacity[m,b]
+      fallback: uniform if global maturity sum is 0.
     """
+
     diagnostics: Dict[str, str] = {}
 
     # ---- month order ----
@@ -70,6 +62,20 @@ def build_monthly_baseline_plan_step3(
     cap = capacity_mat.reindex(index=months)
     wmat = weights_mat.reindex(index=months)
 
+    # ============================================================
+    # CHANGED (NEW): compute GLOBAL maturity weights for external_in
+    # Previously: external_in used weights of to_bucket (wmat[to_bucket])
+    # Now: external_in uses one shared curve w_ext based on total maturity in each month
+    # fallback: uniform if total maturity across all buckets is 0
+    # ============================================================
+    total_by_month = cap.sum(axis=1)  # index=month
+    if float(total_by_month.sum()) > 0:
+        w_ext = (total_by_month / float(total_by_month.sum())).astype(float)
+    else:
+        # fallback still exists; it just becomes GLOBAL instead of per-to_bucket
+        w_ext = _uniform_weights(months)
+    # ============================================================
+
     # ---- normalize general plan ----
     g = general_shift_plan_df[[from_col, to_col, type_col, amt_col]].copy()
     g[from_col] = g[from_col].astype(str).str.strip()
@@ -77,7 +83,7 @@ def build_monthly_baseline_plan_step3(
     g[type_col] = g[type_col].astype(str).str.strip()
     g[amt_col] = pd.to_numeric(g[amt_col], errors="coerce").fillna(0.0)
 
-    # ---- external direction check (optional but helpful) ----
+    # ---- external direction check (net-only) ----
     has_ext_in = ((g[from_col] == external_bucket) & (g[amt_col] > 0)).any()
     has_ext_out = ((g[to_col] == external_bucket) & (g[amt_col] > 0)).any()
     if has_ext_in and has_ext_out:
@@ -85,15 +91,17 @@ def build_monthly_baseline_plan_step3(
         return pd.DataFrame(columns=["month", from_col, to_col, type_col, amt_col]), diagnostics
 
     # ---- feasibility check for real from_buckets ----
-    # total outflow per real bucket = sum of all edges where from_bucket=b (includes internal + external_out)
     real_from = g[(g[from_col] != external_bucket) & (g[amt_col] > 0)].groupby(from_col)[amt_col].sum()
     for b, out_total in real_from.items():
         if b not in cap.columns:
             diagnostics[b] = f"Bucket '{b}' not found in capacity_mat columns."
             continue
         cap_total = float(cap[b].sum())
-        if float(out_total) > cap_total + 1e-9:
-            diagnostics[b] = f"Infeasible within horizon: total_outflow={float(out_total)} > total_capacity={cap_total}."
+        if float(out_total) > cap_total + float(infeasible_tol) + 1e-9:
+            diagnostics[b] = (
+                f"Infeasible within horizon: total_outflow={float(out_total)} "
+                f"> total_capacity={cap_total} (tol={infeasible_tol})."
+            )
     if diagnostics:
         return pd.DataFrame(columns=["month", from_col, to_col, type_col, amt_col]), diagnostics
 
@@ -108,24 +116,24 @@ def build_monthly_baseline_plan_step3(
         t = r[to_col]
         typ = r[type_col]
 
-        # choose weight series
+        # ============================================================
+        # CHANGED: weight selection logic for external_in
+        # Previously (REMOVED):
+        #   if f == EXTERNAL:
+        #       use wmat[to_bucket] if to_bucket has maturity else uniform fallback
+        # Now:
+        #   if f == EXTERNAL:
+        #       ALWAYS use w_ext (global maturity curve)
+        # ============================================================
         if f == external_bucket:
-            # external_in: use to_bucket weights, fallback if zero-maturity
-            if (t in cap.columns) and (float(cap[t].sum()) > 0) and (t in wmat.columns):
-                w = wmat[t]
-            else:
-                # fallback
-                if fallback_for_external_in == "uniform":
-                    w = _uniform_weights(months)
-                else:
-                    w = _uniform_weights(months)
+            w = w_ext
         else:
-            # internal or external_out: use from_bucket weights
+            # internal or external_out: use from_bucket weights (unchanged)
             if f in wmat.columns:
                 w = wmat[f]
             else:
-                # should not happen if inputs consistent, but keep safe fallback
-                w = _uniform_weights(months)
+                w = _uniform_weights(months)  # safe fallback
+        # ============================================================
 
         w = w.reindex(months).fillna(0.0)
         if float(w.sum()) <= 0:
@@ -146,8 +154,17 @@ def build_monthly_baseline_plan_step3(
 
     monthly_plan_df = pd.DataFrame(rows, columns=["month", from_col, to_col, type_col, amt_col])
 
-    # ---- final sanity: edge totals must match general plan exactly (within rounding residual already fixed) ----
-    # We'll keep it as a helper check you can run yourself; not raising here.
+    # ---- sort by month (Mon-YY), then from/to/type ----
+    if not monthly_plan_df.empty:
+        monthly_plan_df["month"] = monthly_plan_df["month"].astype(str).str.strip()
+        monthly_plan_df["_month_dt"] = pd.to_datetime(monthly_plan_df["month"], format="%b-%y", errors="raise")
+        monthly_plan_df = (
+            monthly_plan_df
+            .sort_values(by=["_month_dt", from_col, to_col, type_col])
+            .drop(columns="_month_dt")
+            .reset_index(drop=True)
+        )
+
     return monthly_plan_df, diagnostics
 
 
