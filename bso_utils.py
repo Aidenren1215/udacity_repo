@@ -98,6 +98,13 @@ def build_matured_balance_matrix(
     return matured_mat
 
 
+
+def compute_weights_from_capacity_matrix(capacity_mat: pd.DataFrame) -> pd.DataFrame:
+    col_totals = capacity_mat.sum(axis=0)                       # T_b
+    weights_mat = capacity_mat.divide(col_totals.where(col_totals > 0), axis=1).fillna(0.0)
+    return weights_mat
+
+
 # ---- quick test / usage ----
 # matured_mat = build_matured_balance_matrix(maturity_df)
 # display(matured_mat.head())
