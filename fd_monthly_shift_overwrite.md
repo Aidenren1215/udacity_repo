@@ -37,7 +37,7 @@ Each record contains:
 ---
 
 ### (B) Monthly Maturity Ladder (BUCKET-level constraint)
-This defines the maximum executable outflow.
+This defines the maximum executable outflow for REAL tenor buckets.
 
 Interpretation:
 - capacity[month, bucket] = Balance $m
@@ -45,7 +45,10 @@ Interpretation:
   sum of all movements with from_bucket=b in month m
   MUST NOT exceed capacity[m,b].
 
-Only the column **Balance $m** matters.
+IMPORTANT:
+- This constraint applies ONLY to REAL tenor buckets.
+- **EXTERNAL_IN movements do NOT consume maturity capacity and MUST NOT be
+  restricted by the maturity ladder.**
 
 Monthly maturity ladder:
 {monthly_maturity_ladder}
@@ -97,6 +100,10 @@ You MUST NOT change edge totals.
 For each month m and each REAL from_bucket b (b != EXTERNAL):
 - total_outflow[m,b] <= capacity[m,b]
 
+IMPORTANT:
+- This constraint applies to **internal** and **external_out** movements.
+- **external_in movements MUST NOT be restricted by capacity.**
+
 ---
 
 ### H3. EXTERNAL direction is fixed
@@ -121,6 +128,20 @@ from the GENERAL SHIFT PLAN are satisfied.
 
 ---
 
+## HARD CONSTRAINT FAILURE CATEGORIES (FOR REPORTING)
+
+If user feedback is infeasible, you MUST identify at least one of the
+following failure categories and mention it explicitly in `notes`:
+
+- EDGE_TOTAL_MISMATCH  
+- BUCKET_CAPACITY_VIOLATION  
+- EXTERNAL_DIRECTION_VIOLATION  
+- INVALID_USER_FEEDBACK  
+
+You may report multiple categories if applicable.
+
+---
+
 ## USER FEEDBACK RULES
 
 ### F1. SET-only semantics
@@ -138,11 +159,20 @@ You MUST interpret feedback as absolute SET operations.
 
 ---
 
-### F3. Infeasible feedback
+### F3. Special rule for EXTERNAL_IN (MANDATORY)
+If user feedback modifies ONLY **external_in** edges:
+- You MUST reallocate the SAME external_in edge across other months
+  to preserve EDGE-level totals.
+- You MUST NOT consider maturity ladder capacity for such adjustments.
+- You MUST NOT declare infeasible as long as EDGE-level totals are preserved.
+
+---
+
+### F4. Infeasible feedback
 If you cannot satisfy feedback while meeting all hard constraints:
 - Output the **baseline monthly shift plan unchanged**
 - Set status = "UNCHANGED_INFEASIBLE_FEEDBACK"
-- Explain briefly in `notes`
+- Clearly explain which hard constraint(s) failed in `notes`
 
 ---
 
@@ -171,12 +201,15 @@ For each edge e:
 ---
 
 ### Step 4: Repair BUCKET capacity (H2)
-If any (month m, from_bucket b) violates capacity:
-- Reduce some amounts from that bucket b in month m
+For any violation involving REAL buckets:
+- Reduce some amounts from that bucket in the violating month
   on existing edges,
 - Move the reduced amounts to other months
   on the SAME edges,
 - Until capacity is satisfied.
+
+NOTE:
+- This step MUST NOT be applied to external_in edges.
 
 ---
 
@@ -227,10 +260,20 @@ IMPORTANT:
 ---
 
 ### notes
-Plain text explanation (2–6 lines), describing:
-- whether feedback was applied
-- or why it was infeasible
-- any key reallocations performed
+Plain text explanation (2–6 lines).
+
+REQUIREMENTS:
+- If status == "ADJUSTED_OK":
+  - Briefly describe which user feedback items were applied.
+
+- If status == "UNCHANGED_INFEASIBLE_FEEDBACK":
+  - You MUST explicitly state which hard constraint(s) failed,
+    using one or more of:
+    EDGE_TOTAL_MISMATCH,
+    BUCKET_CAPACITY_VIOLATION,
+    EXTERNAL_DIRECTION_VIOLATION,
+    INVALID_USER_FEEDBACK
+  - Briefly explain why the constraint(s) could not be satisfied.
 
 ---
 
