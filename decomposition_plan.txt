@@ -1,0 +1,27 @@
+n brief, the monthly decomposition works as follows:
+	•	The General Shift Plan defines how much volume should move in total over the year.
+	•	The monthly maturity ladder defines when execution is possible.
+	•	Total shifts are first distributed across months based on maturity availability.
+	•	Within each month, flows are routed following the proportions in the General Shift Plan (with external flows handled consistently).
+
+⸻
+
+Simple example
+
+Assume the General Shift Plan specifies:
+	•	1Y → 6M: 1,200
+	•	1Y → 3M:   800
+
+Total 1Y outflow = 2,000.
+
+If the 1Y maturity profile is:
+	•	Jan 25%, Feb 35%, Mar 40%
+
+Then monthly execution is:
+	•	Jan: 500, Feb: 700, Mar: 800
+
+Within each month, the routing follows the annual ratios:
+	•	60% to 6M, 40% to 3M
+(e.g. in Jan: 300 to 6M, 200 to 3M).
+
+This ensures monthly execution is feasible and fully reconciles back to the General Shift Plan.
