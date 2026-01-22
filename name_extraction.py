@@ -1,258 +1,251 @@
 import re
-import json
-from datetime import datetime
-from typing import List, Dict, Optional, Tuple
-
+from typing import List, Dict, Tuple, Optional
 import fitz  # PyMuPDF
 
 
-# ============================================================
-# Regex definitions
-# ============================================================
+# -----------------------------
+# Utilities
+# -----------------------------
 
-# Meeting title line:
-# "Minutes of the 311th Asset Liability Management Committee (ALCO) Meeting"
-MEETING_TITLE_RE = re.compile(
-    r"^Minutes\s+of\s+the\s+.+?\bMeeting\b.*$",
-    re.IGNORECASE
-)
-
-# Meeting number: 1st / 2nd / 3rd / 311th
-MEETING_NUMBER_RE = re.compile(r"\b(\d+)(st|nd|rd|th)\b", re.IGNORECASE)
-
-# Held-on line
-HELD_ON_RE = re.compile(r"\bheld\s+on\s+(.+)$", re.IGNORECASE)
-
-# Person anchor (hard requirement from you)
-PERSON_PREFIX_RE = re.compile(r"^(Mr|Ms)\b", re.IGNORECASE)
-
-# Title keyword anchors (used to locate start of title)
-TITLE_KEYWORDS = [
-    "CEO", "CFO", "CRO", "COO",
-    "Head", "Director", "VP", "SVP", "EVP",
-    "Treasury", "Finance", "Audit", "Risk",
-    "Corporate", "Group", "Global",
-    "Services", "Bank", "Office",
-    "Chair", "Chairman", "Chairperson",
-]
-
-
-# ============================================================
-# Text utilities
-# ============================================================
-
-def normalize_spaces(s: str) -> str:
-    """Collapse whitespace and trim."""
+def _norm_ws(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
+def _join_words(words: List[str]) -> str:
+    return _norm_ws(" ".join(words))
 
-# ============================================================
-# Meeting-level extraction
-# ============================================================
-
-def extract_meeting_title(lines: List[str]) -> Optional[str]:
-    """Extract the meeting title line starting with 'Minutes of the'."""
-    for ln in lines[:60]:
-        if MEETING_TITLE_RE.match(ln):
-            return ln
-    return None
+def _strip_prefix(name: str) -> str:
+    # Remove leading honorifics you don't want
+    return re.sub(r"^(Mr|Ms|Mrs|Mdm|Dr|Prof)\s+", "", name, flags=re.IGNORECASE).strip()
 
 
-def extract_meeting_number(meeting_title: Optional[str]) -> Optional[str]:
-    """Extract meeting sequence number such as '311th'."""
-    if not meeting_title:
-        return None
-    m = MEETING_NUMBER_RE.search(meeting_title)
-    return m.group(0) if m else None
+# -----------------------------
+# Column detection
+# -----------------------------
 
-
-def classify_committee(meeting_title: str) -> Optional[str]:
+def _group_words_to_lines(words: List[Tuple]) -> List[List[Tuple[float, str]]]:
     """
-    Determine committee type based on meeting title content.
-    """
-    low = meeting_title.lower()
-
-    if "asset liability management committee" in low:
-        return "Asset Liability Management Committee (ALCO)"
-    if "alco sub-committee" in low:
-        return "ALCO Sub-Committee"
-
-    return None
-
-
-def extract_held_on(lines: List[str]) -> Optional[str]:
-    """Extract 'held on ...' payload."""
-    for ln in lines[:120]:
-        if "held on" in ln.lower():
-            m = HELD_ON_RE.search(ln)
-            if m:
-                return m.group(1).strip().rstrip(".")
-            return ln.strip().rstrip(".")
-    return None
-
-
-def parse_datetime_iso(held_on: Optional[str]) -> Optional[str]:
-    """
-    Parse datetime from strings like:
-      'Tuesday, 16 November 2021 at 10:00am'
-    """
-    if not held_on:
-        return None
-
-    m = re.search(
-        r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)",
-        held_on,
-        re.IGNORECASE,
-    )
-    if not m:
-        return None
-
-    date_part, hh, mm, ampm = m.groups()
-    mm = mm or "00"
-
-    try:
-        d = datetime.strptime(date_part, "%d %B %Y")
-    except ValueError:
-        return None
-
-    hour = int(hh)
-    minute = int(mm)
-
-    if ampm.lower() == "pm" and hour != 12:
-        hour += 12
-    if ampm.lower() == "am" and hour == 12:
-        hour = 0
-
-    return d.replace(hour=hour, minute=minute).isoformat()
-
-
-# ============================================================
-# Participant extraction (words-based, table-safe)
-# ============================================================
-
-def looks_like_title_token(tok: str) -> bool:
-    """Check if a token likely belongs to a title."""
-    low = tok.lower()
-    return any(kw.lower() in low for kw in TITLE_KEYWORDS)
-
-
-def words_to_lines(words: List[Tuple]) -> List[List[str]]:
-    """
-    Group PyMuPDF words into logical lines using (block_no, line_no).
+    Group PyMuPDF 'words' into visual lines using (block_no, line_no),
+    and keep (x0, text) pairs sorted by x0.
     """
     by_line = {}
-    for x0, y0, x1, y1, w, bno, lno, wno in words:
+    for x0, y0, x1, y1, w, bno, lno, wno in (words or []):
+        w = _norm_ws(w)
+        if not w:
+            continue
         by_line.setdefault((bno, lno), []).append((x0, w))
 
     lines = []
     for items in by_line.values():
         items.sort(key=lambda t: t[0])
-        toks = [normalize_spaces(w) for _, w in items if normalize_spaces(w)]
-        if toks:
-            lines.append(toks)
-
+        lines.append(items)
     return lines
 
 
-def split_name_title(tokens: List[str]) -> Optional[Dict[str, str]]:
+def _find_three_column_boundaries(
+    lines: List[List[Tuple[float, str]]],
+    page_width: float,
+) -> Optional[Tuple[float, float]]:
     """
-    Split a tokenized line into name and title using keyword-based title anchor.
+    Find split boundaries between 3 columns: [Full Name] [Minutes Name] [Title].
+
+    Strategy:
+    - Find the header line that contains tokens like 'Full' and 'Title'
+    - Use x positions of these header keywords to infer two split points
+    - Return (split1, split2) in absolute x coordinates
     """
-    if not tokens:
-        return None
-
-    if not PERSON_PREFIX_RE.match(tokens[0]):
-        return None
-
-    title_idx = None
-    for i in range(1, len(tokens)):
-        if looks_like_title_token(tokens[i]):
-            title_idx = i
+    # Try to locate a header line
+    best = None
+    for items in lines:
+        text = " ".join(t for _, t in items).lower()
+        if ("full" in text and "title" in text) or ("full" in text and "name" in text and "title" in text):
+            best = items
             break
 
-    if title_idx is None:
-        name = " ".join(tokens[:3]) if len(tokens) >= 3 else " ".join(tokens)
-        title = " ".join(tokens[3:]) if len(tokens) > 3 else ""
+    if not best:
+        return None
+
+    # Get approximate x positions for "Full" and "Title"
+    x_full = None
+    x_title = None
+
+    for x, t in best:
+        tl = t.lower()
+        if x_full is None and tl in ("full", "fullname"):
+            x_full = x
+        if x_title is None and tl == "title":
+            x_title = x
+
+    # If keywords are not isolated (e.g. "Full Name" as two words), fall back to broader search
+    if x_full is None:
+        for x, t in best:
+            if "full" in t.lower():
+                x_full = x
+                break
+    if x_title is None:
+        for x, t in best:
+            if "title" in t.lower():
+                x_title = x
+                break
+
+    if x_full is None or x_title is None:
+        return None
+
+    # Heuristic: split1 somewhere between full-name column and middle column,
+    # split2 somewhere before title column.
+    # We approximate split2 as slightly left of x_title.
+    split2 = x_title - 10  # small margin
+
+    # For split1, try to find the header token that corresponds to the middle column
+    # (often "First", "Preferred", or "Name")
+    x_mid = None
+    for x, t in best:
+        tl = t.lower()
+        if tl in ("first", "preferred"):
+            x_mid = x
+            break
+    if x_mid is None:
+        # If we cannot find it, place split1 halfway between x_full and split2
+        split1 = (x_full + split2) / 2.0
     else:
-        name = " ".join(tokens[:title_idx])
-        title = " ".join(tokens[title_idx:])
+        split1 = x_mid - 10
 
-    return {"name": name.strip(), "title": title.strip()}
+    # Guardrails: make sure splits are within the page width
+    split1 = max(0.1 * page_width, min(split1, 0.8 * page_width))
+    split2 = max(split1 + 5, min(split2, 0.95 * page_width))
+
+    return split1, split2
 
 
-def extract_participants(page: fitz.Page) -> List[Dict[str, str]]:
-    """Extract participants from a page using Mr/Ms anchor."""
+def _fallback_three_column_boundaries(page_width: float) -> Tuple[float, float]:
+    """
+    Fallback if no header is found. This is template-dependent.
+    You may tune these ratios based on your minutes layout.
+    """
+    split1 = 0.45 * page_width
+    split2 = 0.70 * page_width
+    return split1, split2
+
+
+# -----------------------------
+# Participant extraction
+# -----------------------------
+
+def extract_participants_name_title(page: fitz.Page) -> List[Dict[str, str]]:
+    """
+    Extract participants from a machine-readable minutes page where the attendee list is a 3-column table:
+      [Full name] [Name used in minutes] [Title]
+
+    Output:
+      [{"name": "<full name without Mr/Ms>", "title": "<title>"}]
+    """
     words = page.get_text("words") or []
-    lines = words_to_lines(words)
+    lines = _group_words_to_lines(words)
 
-    people = []
+    pw = float(page.rect.width)
+    boundaries = _find_three_column_boundaries(lines, pw)
+    if boundaries is None:
+        split1, split2 = _fallback_three_column_boundaries(pw)
+    else:
+        split1, split2 = boundaries
+
+    results = []
     seen = set()
 
-    for toks in lines:
-        item = split_name_title(toks)
-        if not item:
+    for items in lines:
+        # Assign each word to one of three columns by x0
+        col1, col2, col3 = [], [], []
+        for x, t in items:
+            if x < split1:
+                col1.append(t)
+            elif x < split2:
+                col2.append(t)  # ignored
+            else:
+                col3.append(t)
+
+        full_name_raw = _join_words(col1)
+        title = _join_words(col3)
+
+        # We only keep rows that look like a person row:
+        # - full name starts with Mr/Ms/... OR contains at least 2 tokens (robust)
+        if not full_name_raw:
             continue
 
-        key = (item["name"], item["title"])
+        # Many non-person lines exist (headers, section titles). Filter aggressively.
+        if not re.match(r"^(Mr|Ms|Mrs|Mdm|Dr|Prof)\b", full_name_raw, flags=re.IGNORECASE):
+            # If the table sometimes drops honorific, you can loosen this condition,
+            # but from your screenshots honorific is present in col1.
+            continue
+
+        name = _strip_prefix(full_name_raw)
+        if not name:
+            continue
+
+        # Title must come from the third column; if empty, still keep (optional).
+        # You said title was completely empty before; now it should be filled if the third column is machine-readable.
+        key = (name, title)
         if key in seen:
             continue
         seen.add(key)
 
-        people.append(item)
+        results.append({"name": name, "title": title})
 
-    return people
+    return results
 
 
-# ============================================================
-# Main entry
-# ============================================================
+# -----------------------------
+# Meeting header extraction (keep only what you want)
+# -----------------------------
 
-def extract_minutes_two_pages(pdf_path: str) -> Dict:
+def extract_meeting_name(page_text: str) -> Optional[str]:
     """
-    Extract ALCO main committee and ALCO sub-committee pages
-    based on meeting title lines.
+    Extract the meeting title line like:
+      'Minutes of the xxxth Asset Liability Management Committee (ALCO) Meeting'
+    Works on text-layer only.
     """
-    doc = fitz.open(pdf_path)
-    pages_out = []
+    if not page_text:
+        return None
+    # Use DOTALL so it survives line breaks; then normalize.
+    m = re.search(r"(Minutes\s+of\s+the\s+.*?\bMeeting\b.*)", page_text, flags=re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    return _norm_ws(m.group(1))
 
-    for pno in range(doc.page_count):
-        page = doc.load_page(pno)
-        text = page.get_text("text") or ""
-        lines = [normalize_spaces(x) for x in text.splitlines() if normalize_spaces(x)]
 
-        meeting_title = extract_meeting_title(lines)
-        if not meeting_title:
-            continue
+def extract_held_on(page_text: str) -> Optional[str]:
+    """
+    Extract held-on text like:
+      'Tuesday, 16 November 2021 at 10:00am'
+    """
+    if not page_text:
+        return None
+    m = re.search(r"held\s+on\s+(.{0,200}?)(?:\.\s|\.\n|$)", page_text, flags=re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    return _norm_ws(m.group(1)).rstrip(".")
 
-        committee = classify_committee(meeting_title)
-        if not committee:
-            continue
 
-        meeting_number = extract_meeting_number(meeting_title)
-        held_on = extract_held_on(lines)
-        dt_iso = parse_datetime_iso(held_on)
-        participants = extract_participants(page)
-
-        pages_out.append({
-            "meta": {
-                "page_index_0based": pno,
-                "page_number_1based": pno + 1,
-            },
-            "committee": committee,
-            "meeting_name": meeting_title,
-            "meeting_number": meeting_number,
-            "held_on": held_on,
-            "datetime_iso": dt_iso,
-            "participants": participants,
-        })
+def extract_minutes_page_simple(page: fitz.Page) -> Dict:
+    """
+    Final page-level object you asked for (no meta, no meeting_number, no datetime_iso):
+      {
+        "meeting_name": "...",
+        "held_on": "...",
+        "participants": [{"name": "...", "title": "..."}]
+      }
+    """
+    page_text = page.get_text("text") or ""
+    meeting_name = extract_meeting_name(page_text)
+    held_on = extract_held_on(page_text)
+    participants = extract_participants_name_title(page)
 
     return {
-        "source_pdf": pdf_path,
-        "pages": pages_out,
+        "meeting_name": meeting_name,
+        "held_on": held_on,
+        "participants": participants,
     }
 
 
-if __name__ == "__main__":
-    pdf_path = "meeting_minutes.pdf"  # <-- update path
-    result = extract_minutes_two_pages(pdf_path)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+doc = fitz.open("minutes.pdf")
+page = doc.load_page(target_page_index)
+obj = extract_minutes_page_simple(page)
+print(obj)
