@@ -37,7 +37,9 @@ MAIN_MEETING_RE = re.compile(
 
 SUB_MEETING_RE = re.compile(
     r"""
-    ^ALCO\s+Sub-Committee\s+Meeting\s*$
+    ^Minutes\s+of\s+the\s+
+    (?:\(\s*[^)]*\s*\)\s+)?   # optional parentheses with ANY content
+    ALCO\s+Sub\W*Committee\s+Meeting\s*$
     """,
     re.IGNORECASE | re.VERBOSE,
 )
