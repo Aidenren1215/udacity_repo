@@ -11,64 +11,83 @@ def norm_ws(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
 def strip_prefix(name: str) -> str:
+    """Remove honorifics like Mr / Ms from the beginning of a name."""
     return re.sub(
         r"^(Mr|Ms|Mrs|Mdm|Dr|Prof)\s+",
         "",
         name,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     ).strip()
 
 
 # ============================================================
-# Step 1: find target pages by keywords (YOU requested this)
+# Meeting name detection (STRICT, line-based)
 # ============================================================
 
-MEETING_PAGE_RE = re.compile(
-    r"Minutes\s+of\s+the\s+.*?\bMeeting\b",
-    re.IGNORECASE | re.DOTALL
+MAIN_MEETING_RE = re.compile(
+    r"""
+    ^Minutes\s+of\s+the\s+
+    (?:\(\s*\d+(?:st|nd|rd|th)\s*\)\s+)?   # optional (xxxth)
+    Asset\s+Liability\s+Management\s+Committee
+    (?:\s*\(\s*ALCO\s*\))?                 # optional (ALCO)
+    \s+Meeting\s*$
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
+
+SUB_MEETING_RE = re.compile(
+    r"""
+    ^ALCO\s+Sub-Committee\s+Meeting\s*$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+def extract_meeting_name(text: str) -> Optional[str]:
+    """
+    Return the exact meeting-name line if matched; otherwise None.
+    """
+    if not text:
+        return None
+
+    for line in text.splitlines():
+        ln = norm_ws(line)
+        if not ln:
+            continue
+
+        if MAIN_MEETING_RE.match(ln):
+            return ln
+        if SUB_MEETING_RE.match(ln):
+            return ln
+
+    return None
+
+
+# ============================================================
+# Page locator (by meeting-name keywords)
+# ============================================================
 
 def find_minutes_pages(doc: fitz.Document) -> List[int]:
     """
-    Find page indices that contain meeting minutes titles like:
-      'Minutes of the xxxth ... Meeting'
+    Find pages that contain one of the two valid meeting-name lines.
     """
-    hit_pages = []
-
+    pages = []
     for i in range(doc.page_count):
-        text = doc.load_page(i).get_text("text") or ""
-        if MEETING_PAGE_RE.search(text):
-            hit_pages.append(i)
-
-    return hit_pages
-
-
-# ============================================================
-# Step 2: extract meeting header (simple, no extras)
-# ============================================================
-
-def extract_meeting_name(text: str) -> Optional[str]:
-    m = re.search(
-        r"(Minutes\s+of\s+the\s+.*?\bMeeting\b.*)",
-        text,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    return norm_ws(m.group(1)) if m else None
-
-def extract_held_on(text: str) -> Optional[str]:
-    m = re.search(
-        r"held\s+on\s+(.{0,200}?)(?:\.\s|\.\n|$)",
-        text,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    return norm_ws(m.group(1)).rstrip(".") if m else None
+        page = doc.load_page(i)
+        text = page.get_text("text") or ""
+        if extract_meeting_name(text):
+            pages.append(i)
+    return pages
 
 
 # ============================================================
-# Step 3: extract participants (3-column logic, FIXED)
+# Name extraction (FIRST COLUMN ONLY)
 # ============================================================
 
 def words_to_lines(words: List[Tuple]) -> List[List[Tuple[float, str]]]:
+    """
+    Group PyMuPDF words into visual lines using (block_no, line_no),
+    keeping (x0, text).
+    """
     by_line = {}
     for x0, y0, x1, y1, w, bno, lno, wno in words:
         w = norm_ws(w)
@@ -82,85 +101,77 @@ def words_to_lines(words: List[Tuple]) -> List[List[Tuple[float, str]]]:
         lines.append(items)
     return lines
 
-def detect_column_boundaries(page: fitz.Page) -> Tuple[float, float]:
-    """
-    Generic fallback for your minutes template.
-    Adjust ratios only if your PDF layout changes.
-    """
-    w = page.rect.width
-    return 0.45 * w, 0.72 * w
 
-def extract_participants(page: fitz.Page) -> List[Dict[str, str]]:
+def detect_name_column_boundary(page: fitz.Page) -> float:
+    """
+    Boundary between first column (full name) and the rest.
+    This is template-dependent but stable for your minutes layout.
+    """
+    return 0.45 * page.rect.width
+
+
+def extract_names_from_page(page: fitz.Page) -> List[str]:
+    """
+    Extract participant names from the FIRST column only.
+    - Remove honorifics
+    - Support multi-word names
+    """
     words = page.get_text("words") or []
     lines = words_to_lines(words)
 
-    split1, split2 = detect_column_boundaries(page)
+    split_x = detect_name_column_boundary(page)
 
-    results = []
+    names = []
     seen = set()
 
     for items in lines:
-        col1, col3 = [], []
-
-        for x, t in items:
-            if x < split1:
-                col1.append(t)
-            elif x >= split2:
-                col3.append(t)
-
-        raw_name = norm_ws(" ".join(col1))
-        title = norm_ws(" ".join(col3))
-
-        if not raw_name:
+        col1_words = [t for x, t in items if x < split_x]
+        if not col1_words:
             continue
 
-        # Require honorific in raw data to avoid headers
+        raw_name = norm_ws(" ".join(col1_words))
+
+        # Require honorific in raw data to filter out headers / noise
         if not re.match(r"^(Mr|Ms|Mrs|Mdm|Dr|Prof)\b", raw_name, re.IGNORECASE):
             continue
 
         name = strip_prefix(raw_name)
-
-        key = (name, title)
-        if key in seen:
+        if not name or name in seen:
             continue
-        seen.add(key)
 
-        results.append({
-            "name": name,
-            "title": title,
-        })
+        seen.add(name)
+        names.append(name)
 
-    return results
+    return names
 
 
 # ============================================================
-# Final API: YOU call this, nothing else
+# Final API (THIS is what you call)
 # ============================================================
 
-def extract_minutes_from_pdf(pdf_path: str) -> List[Dict]:
+def extract_minutes_names(pdf_path: str) -> List[Dict]:
     """
     End-to-end:
     - Open PDF
-    - Find pages by meeting-title keywords
-    - Extract meeting_name, held_on, participants(name, title)
+    - Locate meeting pages by strict meeting-name keywords
+    - Extract meeting_name and participant names only
     """
     doc = fitz.open(pdf_path)
-    pages = find_minutes_pages(doc)
+    page_indices = find_minutes_pages(doc)
 
-    outputs = []
+    results = []
 
-    for pno in pages:
+    for pno in page_indices:
         page = doc.load_page(pno)
         text = page.get_text("text") or ""
 
-        outputs.append({
+        results.append({
             "page_index": pno,
             "meeting_name": extract_meeting_name(text),
-            "held_on": extract_held_on(text),
-            "participants": extract_participants(page),
+            "names": extract_names_from_page(page),
         })
 
-    return outputs
+    return results
 
 
 # ============================================================
@@ -169,6 +180,6 @@ def extract_minutes_from_pdf(pdf_path: str) -> List[Dict]:
 
 if __name__ == "__main__":
     pdf_path = "minutes.pdf"
-    data = extract_minutes_from_pdf(pdf_path)
-    for d in data:
-        print(d)
+    data = extract_minutes_names(pdf_path)
+    for item in data:
+        print(item)
