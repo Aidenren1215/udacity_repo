@@ -60,13 +60,29 @@ def _find_start_page(doc: fitz.Document) -> int:
     )
 
 
-def _find_end_marker_page(doc: fitz.Document) -> int:
-    # Find the first page containing the end marker
-    for pno in range(doc.page_count):
-        if END_MARKER in doc.load_page(pno).get_text("text"):
-            return pno
+def _find_end_marker_page(doc: fitz.Document, start_page: int) -> int:
+    """
+    Locate the end marker page by matching a line that is:
+    - ALL CAPS
+    - Exactly equal to 'GROUP BALANCE SHEET STRATEGY' (after normalization)
+    """
+    TARGET = "GROUP BALANCE SHEET STRATEGY"
+
+    for pno in range(start_page, doc.page_count):
+        text = doc.load_page(pno).get_text("text")
+
+        for line in text.splitlines():
+            line_norm = line.strip()
+            if not line_norm:
+                continue
+
+            # Enforce ALL CAPS and exact match
+            if line_norm.isupper() and line_norm == TARGET:
+                return pno
+
     raise ValueError(
-        f"End marker page not found: '{END_MARKER}' not found."
+        "End marker page not found: exact ALL-CAPS line "
+        "'GROUP BALANCE SHEET STRATEGY' not found."
     )
 
 
