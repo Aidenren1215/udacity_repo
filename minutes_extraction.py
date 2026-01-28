@@ -8,7 +8,8 @@ from datetime import datetime
 # --------------------------------------------------
 
 START_RE = re.compile(
-    r"Minutes\s+of\s+the\s*\([^)]*\)\s*Asset\s+Liability\s+Management\s+Committee\s*\(ALCO\)\s*Meeting",
+    r"Minutes\s+of\s+the\s*(?:\([^)]*\)\s*)?"
+    r"Asset\s+Liability\s+Management\s+Committee\s*\(ALCO\)\s*Meeting",
     re.IGNORECASE
 )
 
