@@ -5,6 +5,8 @@ Admins have full access to application features, configuration options, and appr
 This access model enforces the principle of least privilege and ensures governance and compliance requirements are consistently applied across the application.
 
 
-The ALCO Minutes Agent is designed to support regionalized ALCO operations, where each country maintains its own independent set of ALCO minutes. ALCO minutes are segregated by country and managed as separate datasets, reflecting local regulatory, governance, and operational requirements.
+The ALCO Minutes Agent is designed with strict country-level segregation, where each country maintains its own independent set of ALCO minutes. To enforce this separation at the data layer, ALCO minutes are indexed into region-specific Elasticsearch sub-indexes, with one sub-index per country or region.
 
-Access to each country’s ALCO minutes is controlled via country-specific Active Directory (AD) groups, with authorization owned by the respective local Corporate Treasury (CT) teams. Where explicitly approved by local CT administrators, a single user may be granted access to multiple country-level ALCO minutes through membership in multiple AD groups. This approach preserves strict regional data separation while allowing controlled cross-country access when business needs require it.
+User queries are restricted to the Elasticsearch sub-indexes associated with the user’s Active Directory (AD) group membership, ensuring that users can only retrieve ALCO minutes relevant to their own region. Authorization for each regional dataset is managed by the respective local Corporate Treasury (CT) teams. Where explicitly approved by local CT administrators, a single user may be granted access to multiple regional sub-indexes through membership in multiple AD groups.
+
+This design enforces regional data isolation by default while supporting controlled cross-region access when required.
