@@ -26,3 +26,9 @@ def find_end_marker_page(doc: fitz.Document, start_from: int) -> int:
         "End marker page not found: "
         "no line containing 'with no other matters, the meeting ended at'."
     )
+    
+    
+SUB_START_RE = re.compile(
+    r"Minutes\s+of\s+the\s+.{0,30}?\bALCO\b\s+Sub[-\s]?committee\s+Meeting",
+    re.IGNORECASE | re.DOTALL
+)
