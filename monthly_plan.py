@@ -40,3 +40,6 @@ class MonthlyFDPlan(BaseModel):
     summary_markdown: str
     reallocation_plan: List[MonthlyReallocationRecord]
     global_validation: MonthlyGlobalValidation
+    
+    
+# just for github new ssh test
