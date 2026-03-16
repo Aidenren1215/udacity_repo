@@ -151,29 +151,32 @@ def extract_names_from_page(page: fitz.Page) -> List[str]:
 # Final API (THIS is what you call)
 # ============================================================
 
-def extract_minutes_names(pdf_path: str) -> List[Dict]:
+def extract_minutes_names(pdf_path: str) -> Dict:
     """
     End-to-end:
     - Open PDF
     - Locate meeting pages by strict meeting-name keywords
     - Extract meeting_name and participant names only
     """
-    doc = fitz.open(pdf_path)
-    page_indices = find_minutes_pages(doc)
+    try:
+        doc = fitz.open(pdf_path)
+        page_indices = find_minutes_pages(doc)
 
-    results = []
+        if not page_indices:
+            raise ValueError(f"No meeting pages found. The PDF may contain a valid meeting title.")
 
-    for pno in page_indices:
-        page = doc.load_page(pno)
+        page = doc.load_page(page_indices[0])
         text = page.get_text("text") or ""
 
-        results.append({
-            "page_index": pno,
+        return {
+            "page_index": page_indices[0],
             "meeting_name": extract_meeting_name(text),
             "names": extract_names_from_page(page),
-        })
-
-    return results
+        }
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": f"Failed to extract names from '{pdf_path}': {str(e)}"}
 
 
 # ============================================================
