@@ -40,3 +40,17 @@ HKGRP_ASC_PATTERN = re.compile(
     r'|Minutes\s+of\s+the\s+ALCO\s+Sub-Committee\s*\(ASC\)\s+Meeting.*'
     r'))'
 )
+
+import os
+
+folder = "files/alco minutes hk/ASC minutes"
+
+for filename in os.listdir(folder):
+    if "ASC Minutes" in filename:
+        new_name = filename.replace("ASC Minutes", "ALCO Sub-committee minutes")
+
+        old_path = os.path.join(folder, filename)
+        new_path = os.path.join(folder, new_name)
+
+        print(f"{filename}  ->  {new_name}")  # 先确认
+        os.rename(old_path, new_path)
