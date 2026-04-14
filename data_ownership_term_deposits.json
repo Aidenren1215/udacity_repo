@@ -1,0 +1,38 @@
+{
+  "term_mappings": {
+    "term deposit": "A fixed-term deposit product. One row per deposit or deal in t_fsi_me_term_deposits_lv1. A single customer may have multiple deposits across different currencies and tenors.",
+    "book balance": "Outstanding balance of a deposit expressed in SGD. Column: o_cur_book_bal_sgd (current) or o_avg_book_bal_sgd (average over period).",
+    "customer rate": "Interest rate given to the customer on the deposit. Derived column: customer_rate.",
+    "customer margin": "Spread or margin related to the customer rate. Derived column: customer_margin.",
+    "transfer pricing": "Internal funds transfer pricing in percentage. Derived column: transfer_pricing.",
+    "liquidity premium": "Internal value assigned for liquidity risk, in percentage. Derived column: liquidity_premium.",
+    "interest expense": "Interest cost the bank pays on the deposit, MTD in SGD. Column: o_int_exp_sgd.",
+    "contractual tenor": "Original agreed term of the fixed deposit at the time of booking. Column: contractual_tenor.",
+    "remaining tenor": "Time left until the fixed deposit matures as of the reporting date. Column: remaining_contractual_tenor.",
+    "maturity date": "Date when the fixed deposit is due to mature. Column: maturity_date.",
+    "origination date": "Trade date, date when the deposit started or was first booked. Column: origination_date.",
+    "businessdate": "Monthly snapshot date. Compulsory filter for all queries against t_fsi_me_term_deposits_lv1. Column: businessdate.",
+    "as_of_date": "Reporting date for the record. Tells us the snapshot date of the data. Column: as_of_date.",
+    "entity": "The legal entity that books the deposit. Identified by column cntry. Entity Singapore is represented as 'SG'.",
+    "segment": "Business segment the deposit belongs to. Three primary segments: Retail, Group Wholesale Banking (GWB), and Financial Institutions. Column: segment.",
+    "GWB": "Group Wholesale Banking. One of the three primary business segments. Refers to corporate and institutional banking clients.",
+    "FI": "Financial Institutions. One of the three primary business segments. Refers to deposits from other banks and financial entities.",
+    "GL product code": "General ledger product code for the deposit. Used in financial reporting. Column: gl_product_code.",
+    "SIBS product code": "Internal product code used in SIBS or the source banking system. Column: product_code_in_sibs.",
+    "fund charge": "Transfer pricing MTD in SGD. Column: o_fund_chg_cr_sgd.",
+    "strategic adjustment": "Manual payment or penalty adjustment MTD in SGD. Column: o_strategic_adjust_sgd."
+  },
+
+  "table_aliases": {
+    "term deposits": "t_fsi_me_term_deposits_lv1",
+    "TD table": "t_fsi_me_term_deposits_lv1",
+    "fixed deposits": "t_fsi_me_term_deposits_lv1",
+    "FD table": "t_fsi_me_term_deposits_lv1",
+    "deposits table": "t_fsi_me_term_deposits_lv1",
+    "term deposit registry": "t_fsi_me_term_deposits_lv1"
+  },
+
+  "team_data_ownership": {
+    "Corporate Treasury Team": ["t_fsi_me_term_deposits_lv1"]
+  }
+}
