@@ -1,0 +1,42 @@
+Model Selection
+
+=====================================================================
+
+Overview
+
+Three models are currently available on our internal infrastructure. All Phase 2 development to date has been carried out on gpt-oss-120b, which serves as the baseline.
+
+=====================================================================
+
+Available Models
+
+gpt-oss-120b
+OpenAI's open-weight MoE model (120B total, ~5B active) with a 131K token context window. Native function calling, strong structured output, and an OpenAI-compatible tool-calling format that integrates cleanly with LangGraph. Mature ecosystem and predictable behaviour make it a solid default for every agent role.
+
+Qwen3-Next-80B-A3B-Instruct-FP8
+Alibaba's agent-oriented MoE model (80B total, 3B active) with a 262K token context window. Purpose-built for agentic workflows, with hybrid attention for ultra-long context and very low inference latency thanks to the small active parameter count. The FP8 variant retains effectively full quality. A strong candidate where long context or latency matters most.
+
+Gemma 2
+A chat-oriented model without native function calling. Tool use must be emulated through prompt engineering, which is unreliable in multi-turn agentic settings. Not suitable for the BSO or any sub-agent in this architecture.
+
+=====================================================================
+
+Current Approach
+
+All agents currently run on gpt-oss-120b. This uniformity is deliberate: it keeps the infrastructure simple (one endpoint, one latency profile, one set of prompt patterns) and lets the team focus on architecture and prompts rather than cross-model debugging.
+
+We recommend continuing on gpt-oss-120b through the MVP and only introducing a second model once evaluation evidence points to a specific bottleneck. For example, if BSO routing quality degrades as context grows, Qwen3-Next-80B-A3B-Instruct-FP8 becomes a strong candidate to swap in for the BSO role. Mixed-model deployment should not be adopted until eval data justifies the added operational complexity.
+
+=====================================================================
+
+Future Exploration
+
+The open-weight model landscape is moving quickly, and several recent releases are explicitly aimed at agentic workflows. We plan to continue evaluating new models as they become available, with particular interest in:
+
+GLM (Zhipu AI) — a family of open-weight models explicitly optimized for agentic engineering and long-horizon tasks. Consistently strong on tool-orchestration benchmarks.
+
+MiniMax M-series — open-weight MoE models purpose-built for agent use cases, notable for high throughput and strong tool-use / instruction-following performance at low active-parameter counts.
+
+Kimi K-series (Moonshot) — open-weight models released under a modified MIT license, with very long context windows suitable for long agent traces and multi-step planning.
+
+Any of these would be evaluated against gpt-oss-120b on our own eval framework before being considered for adoption. Internal infrastructure support and security review would also be prerequisites.
