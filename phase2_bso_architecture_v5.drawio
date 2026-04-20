@@ -1,0 +1,297 @@
+<mxfile host="app.diagrams.net" modified="2026-04-20T00:00:00.000Z" agent="Claude" version="22.0.0">
+  <diagram id="phase2-bso-v5" name="Phase 2 - BSO Architecture v5">
+    <mxGraphModel dx="2000" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Phase 2 — Balance Sheet Optimization Agent Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="600" y="20" width="800" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 1 input -->
+        <mxCell id="phase1" value="Phase 1 Output&#10;(Macro Strategy)&#10;&#10;e.g. &quot;Interest rates&#10;expected to drop&quot;" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="320" width="200" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Final output -->
+        <mxCell id="output" value="Approved Balance Sheet&#10;Adjustment Plan" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1720" y="325" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- BSO - purple, distinct level -->
+        <mxCell id="bso" value="BSO&#10;(Balance Sheet Orchestrator)&#10;&#10;• Receives macro strategy from Phase 1&#10;• Decomposes into sub-strategies&#10;• Dispatches tasks to sub-agents&#10;• Consolidates proposals&#10;• Invokes Optimization Agent if needed&#10;• Evaluates vs. current baseline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=12;fontStyle=1;arcSize=10;align=center;verticalAlign=middle;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="800" y="270" width="400" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Sub-agents layer label -->
+        <mxCell id="subagent_label" value="Sub-Agents (orchestrated by BSO)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=2;fontColor=#666666" vertex="1" parent="1">
+          <mxGeometry x="700" y="650" width="600" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Sub-agents row -->
+        <mxCell id="fd_proposer" value="FD Proposer&#10;&#10;Optimizes Fixed Deposit&#10;structure per BSO directive&#10;&#10;e.g. shift 1Y deposits → ≤3M&#10;as they mature" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;align=center;verticalAlign=middle;arcSize=10" vertex="1" parent="1">
+          <mxGeometry x="80" y="700" width="240" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="loan_proposer" value="Loan Proposer&#10;&#10;Optimizes Loan structure&#10;per BSO directive&#10;&#10;e.g. extend short-term loans&#10;to lock in current high rates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;align=center;verticalAlign=middle;arcSize=10" vertex="1" parent="1">
+          <mxGeometry x="420" y="700" width="240" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="casa_proposer" value="CASA Proposer&#10;&#10;Optimizes CASA (Current &amp;&#10;Savings Account) structure&#10;per BSO directive" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;align=center;verticalAlign=middle;arcSize=10" vertex="1" parent="1">
+          <mxGeometry x="760" y="700" width="240" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="analytics_agent" value="Analytics Agent&#10;&#10;Performs ad-hoc analytics&#10;(e.g. for ALCO meetings):&#10;metrics computation,&#10;trend analysis, reporting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;align=center;verticalAlign=middle;arcSize=10" vertex="1" parent="1">
+          <mxGeometry x="1100" y="700" width="240" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="optimization_agent" value="Optimization Agent&#10;&#10;Fine-tunes consolidated&#10;proposals across FD / Loan /&#10;CASA to maximize NIM under&#10;global constraints" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;align=center;verticalAlign=middle;arcSize=10" vertex="1" parent="1">
+          <mxGeometry x="1440" y="700" width="240" height="140" as="geometry" />
+        </mxCell>
+
+        <!-- Tools layer label -->
+        <mxCell id="tools_label" value="Tools (invoked by sub-agents)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=2;fontColor=#666666" vertex="1" parent="1">
+          <mxGeometry x="700" y="1040" width="600" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="data_agent" value="🔧 Data Agent&#10;&#10;Queries database for current&#10;state: FD / Loan / CASA tables,&#10;volumes, rates, maturities" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;align=center;verticalAlign=middle;arcSize=10" vertex="1" parent="1">
+          <mxGeometry x="440" y="1090" width="260" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="volume_adjuster" value="🔧 Volume Adjuster&#10;&#10;Input: table + boundary conditions&#10;Output: rebalanced volume plan&#10;&#10;e.g. shift 6M-1Y FD → 1-3M,&#10;total FD volume +20%" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;align=center;verticalAlign=middle;arcSize=10" vertex="1" parent="1">
+          <mxGeometry x="820" y="1090" width="260" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- ===== EDGES ===== -->
+
+        <!-- Phase 1 -> BSO -->
+        <mxCell id="e_phase1_bso" value="macro strategy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;fontSize=10" edge="1" parent="1" source="phase1" target="bso">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- BSO -> Output -->
+        <mxCell id="e_bso_output" value="approved plan" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=10;strokeWidth=2" edge="1" parent="1" source="bso" target="output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== BSO <-> FD Proposer ===== -->
+        <mxCell id="e_bso_fd_down" value="task dispatch" style="edgeStyle=none;rounded=0;html=1;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;fontSize=10;strokeColor=#6C8EBF;endArrow=classic" edge="1" parent="1" source="bso" target="fd_proposer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="410" />
+              <mxPoint x="130" y="410" />
+              <mxPoint x="130" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_fd_bso_up" value="proposal" style="edgeStyle=none;rounded=0;html=1;exitX=0.85;exitY=0;exitDx=0;exitDy=0;entryX=0.1;entryY=1;entryDx=0;entryDy=0;fontSize=10;strokeColor=#B85450;endArrow=classic" edge="1" parent="1" source="fd_proposer" target="bso">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="284" y="620" />
+              <mxPoint x="840" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== BSO <-> Loan Proposer ===== -->
+        <mxCell id="e_bso_loan_down" value="task dispatch" style="edgeStyle=none;rounded=0;html=1;exitX=0.18;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;fontSize=10;strokeColor=#6C8EBF;endArrow=classic" edge="1" parent="1" source="bso" target="loan_proposer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="872" y="560" />
+              <mxPoint x="468" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_loan_bso_up" value="proposal" style="edgeStyle=none;rounded=0;html=1;exitX=0.8;exitY=0;exitDx=0;exitDy=0;entryX=0.33;entryY=1;entryDx=0;entryDy=0;fontSize=10;strokeColor=#B85450;endArrow=classic" edge="1" parent="1" source="loan_proposer" target="bso">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="612" y="600" />
+              <mxPoint x="932" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== BSO <-> CASA Proposer ===== -->
+        <mxCell id="e_bso_casa_down" value="task dispatch" style="edgeStyle=none;rounded=0;html=1;exitX=0.4;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;fontSize=10;strokeColor=#6C8EBF;endArrow=classic" edge="1" parent="1" source="bso" target="casa_proposer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="960" y="540" />
+              <mxPoint x="820" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_casa_bso_up" value="proposal" style="edgeStyle=none;rounded=0;html=1;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.55;entryY=1;entryDx=0;entryDy=0;fontSize=10;strokeColor=#B85450;endArrow=classic" edge="1" parent="1" source="casa_proposer" target="bso">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="940" y="600" />
+              <mxPoint x="1020" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== BSO <-> Analytics Agent (enters/exits from Analytics left side, BSO right portion of bottom) ===== -->
+        <mxCell id="e_bso_analytics_down" value="analytics request&#10;(e.g. ALCO query)" style="edgeStyle=none;rounded=0;html=1;exitX=0.65;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;fontSize=10;strokeColor=#6C8EBF;endArrow=classic" edge="1" parent="1" source="bso" target="analytics_agent">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1060" y="540" />
+              <mxPoint x="1060" y="742" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_analytics_bso_up" value="analytics result" style="edgeStyle=none;rounded=0;html=1;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=0.6;entryY=1;entryDx=0;entryDy=0;fontSize=10;strokeColor=#B85450;endArrow=classic" edge="1" parent="1" source="analytics_agent" target="bso">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="798" />
+              <mxPoint x="1080" y="640" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== BSO <-> Optimization Agent (via right side of BSO, route through x=1360 and x=1380) ===== -->
+        <mxCell id="e_bso_opt_down" value="optimize proposals" style="edgeStyle=none;rounded=0;html=1;exitX=1;exitY=0.7;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;fontSize=10;strokeColor=#6C8EBF;endArrow=classic" edge="1" parent="1" source="bso" target="optimization_agent">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1360" y="410" />
+              <mxPoint x="1488" y="410" />
+              <mxPoint x="1488" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_opt_bso_up" value="optimized plan" style="edgeStyle=none;rounded=0;html=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;fontSize=10;strokeColor=#B85450;endArrow=classic" edge="1" parent="1" source="optimization_agent" target="bso">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1740" y="742" />
+              <mxPoint x="1740" y="330" />
+              <mxPoint x="1200" y="330" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== Sub-agents -> Tools (SOLID orange) ===== -->
+        <!--
+          Lane allocation (top-down):
+          y=880: CASA -> Data (leftward)
+          y=905: Loan -> Data (short)
+          y=935: Loan -> Volume (rightward)
+          y=960: CASA -> Volume (short)
+          y=985: FD -> Data (rightward, long)
+          y=1015: FD -> Volume (rightward, longest)
+          Analytics -> Data: routed along x=560 down through y=880 column - needs a different approach
+          
+          Actually let's use:
+          - FD exits right side of box (different x values), uses upper lanes
+          - Loan exits bottom (different x), short runs
+          - CASA exits bottom (different x), short runs  
+          - Analytics exits left side, goes down and around
+        -->
+
+        <!-- FD Proposer -> Data Agent: exit right side of FD, lane y=870, enter Data top-left -->
+        <mxCell id="e_fd_data" value="" style="edgeStyle=none;rounded=0;html=1;strokeColor=#D79B00;exitX=1;exitY=0.4;exitDx=0;exitDy=0;entryX=0.1;entryY=0;entryDx=0;entryDy=0;endArrow=classic" edge="1" parent="1" source="fd_proposer" target="data_agent">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="360" y="756" />
+              <mxPoint x="360" y="1060" />
+              <mxPoint x="466" y="1060" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- FD Proposer -> Volume Adjuster: exit right side of FD, lane y=900, long path to Volume top-left -->
+        <mxCell id="e_fd_vol" value="" style="edgeStyle=none;rounded=0;html=1;strokeColor=#D79B00;exitX=1;exitY=0.6;exitDx=0;exitDy=0;entryX=0.1;entryY=0;entryDx=0;entryDy=0;endArrow=classic" edge="1" parent="1" source="fd_proposer" target="volume_adjuster">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="384" y="784" />
+              <mxPoint x="384" y="1040" />
+              <mxPoint x="846" y="1040" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Loan Proposer -> Data Agent: exit bottom-left of Loan, short path -->
+        <mxCell id="e_loan_data" value="" style="edgeStyle=none;rounded=0;html=1;strokeColor=#D79B00;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.4;entryY=0;entryDx=0;entryDy=0;endArrow=classic" edge="1" parent="1" source="loan_proposer" target="data_agent">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="900" />
+              <mxPoint x="544" y="900" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Loan Proposer -> Volume Adjuster: exit bottom-right of Loan, lane y=960 -->
+        <mxCell id="e_loan_vol" value="" style="edgeStyle=none;rounded=0;html=1;strokeColor=#D79B00;exitX=0.85;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;endArrow=classic" edge="1" parent="1" source="loan_proposer" target="volume_adjuster">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="624" y="960" />
+              <mxPoint x="872" y="960" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- CASA Proposer -> Data Agent: exit bottom-left, lane y=930 (route leftward) -->
+        <mxCell id="e_casa_data" value="" style="edgeStyle=none;rounded=0;html=1;strokeColor=#D79B00;exitX=0.08;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;endArrow=classic" edge="1" parent="1" source="casa_proposer" target="data_agent">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="779" y="930" />
+              <mxPoint x="622" y="930" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- CASA Proposer -> Volume Adjuster: exit bottom-center, short -->
+        <mxCell id="e_casa_vol" value="" style="edgeStyle=none;rounded=0;html=1;strokeColor=#D79B00;exitX=0.4;exitY=1;exitDx=0;exitDy=0;entryX=0.4;entryY=0;entryDx=0;entryDy=0;endArrow=classic" edge="1" parent="1" source="casa_proposer" target="volume_adjuster">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="856" y="1000" />
+              <mxPoint x="924" y="1000" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Analytics Agent -> Data Agent: exit bottom-left, go down to y=1070 then leftward to Data -->
+        <mxCell id="e_analytics_data" value="" style="edgeStyle=none;rounded=0;html=1;strokeColor=#D79B00;exitX=0.1;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;endArrow=classic" edge="1" parent="1" source="analytics_agent" target="data_agent">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1124" y="1174" />
+              <mxPoint x="700" y="1174" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== Legend ===== -->
+        <mxCell id="legend_box" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#CCCCCC;dashed=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="430" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_title" value="Legend" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="90" y="88" width="410" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_bso" value="Orchestrator (BSO)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=10;fontStyle=1;strokeWidth=2" vertex="1" parent="1">
+          <mxGeometry x="100" y="115" width="140" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_sub" value="Sub-Agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="250" y="115" width="110" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_tool" value="Tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="370" y="115" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_io" value="Input / Output" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="440" y="115" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="──▶ blue: task dispatch (BSO → sub-agent)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#6C8EBF" vertex="1" parent="1">
+          <mxGeometry x="100" y="155" width="400" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" value="──▶ red: result return (sub-agent → BSO)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#B85450" vertex="1" parent="1">
+          <mxGeometry x="100" y="180" width="400" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" value="──▶ orange: tool invocation" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#D79B00" vertex="1" parent="1">
+          <mxGeometry x="100" y="205" width="400" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7" value="Typical usecase: FD Proposer ← BSO task → calls Data Agent → analyzes → calls Volume Adjuster → returns proposal" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=9;fontStyle=2;fontColor=#555555" vertex="1" parent="1">
+          <mxGeometry x="100" y="235" width="400" height="50" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

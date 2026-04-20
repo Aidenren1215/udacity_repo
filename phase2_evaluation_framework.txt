@@ -1,0 +1,128 @@
+Evaluation Framework
+
+=====================================================================
+
+Overview
+
+Evaluating an agentic system is fundamentally different from evaluating a single model or a deterministic function. The components in Phase 2 fall into three categories, each of which requires a distinct evaluation approach.
+
+Tools (Data Agent, Volume Adjuster) are deterministic: given the same inputs, they must produce the same outputs. They are evaluated the way any backend function is evaluated — with unit tests and integration tests against a fixed test-case suite, measuring input-output accuracy.
+
+Proposer sub-agents (FD, Loan, CASA) are domain-reasoning agents. They produce proposals that are judgment-based rather than uniquely correct, which means they cannot be scored with a single accuracy number. Their evaluation must cover both the quality of the output and the reasonableness of the process.
+
+The BSO is an orchestrator. Its "output" is not a single proposal but the execution of an entire workflow — what it dispatched, when, in what order, and whether the final plan clears the baseline comparison. Its evaluation must cover routing correctness, sub-task decomposition quality, and end-to-end outcome.
+
+The rest of this section details how each category is evaluated.
+
+=====================================================================
+
+Tool Evaluation
+
+Tools are the easiest component to evaluate. Both the Data Agent and the Volume Adjuster are deterministic, and we evaluate them with a standard test suite:
+
+- A curated set of input-output test cases covering typical usage, edge cases, and failure modes.
+- Pass/fail measurement against expected outputs (for the Volume Adjuster: the expected rebalanced table; for the Data Agent: the expected query results).
+- Overall accuracy reported as pass rate.
+
+No LLM-as-judge is needed here. The tools are fully specified contracts and a test case either passes or fails.
+
+=====================================================================
+
+Proposer Evaluation
+
+Proposer evaluation is organized into three layers, from fully automated to fully manual. Each layer catches a different class of failure.
+
+Layer 1 — Hard Rules (fully automated)
+
+This layer defines the non-negotiable baseline. Any proposal that fails here is a fail, regardless of how good it looks otherwise. The checks include:
+
+- Schema compliance: the proposal contains all required fields (tenor buckets, volumes, rates) in the correct structure.
+- Numerical constraints: total volume conservation where required, no negative values, all tenor buckets are valid.
+- Boundary condition adherence: any constraints passed down by the BSO (e.g. "total FD volume change capped at 20%") are respected.
+- Tool invocation correctness: the proposer actually called the Data Agent when it should have, and passed valid parameters to the Volume Adjuster.
+- Directive responsiveness: the proposal moves in the direction the BSO asked for (e.g. if the directive was "shift FD from long-tenor to short-tenor", the proposal should not move in the opposite direction).
+
+All of this can be expressed as pytest or eval-script assertions and run automatically in CI. This is the same pattern we use for the ALCO Agent eval framework.
+
+Layer 2 — Directional Quality (LLM-as-judge, semi-automated)
+
+Hard rules catch mechanical failures but not poor judgment. For quality of reasoning, we use an LLM-as-judge pipeline with a stronger model (Opus or similar) scoring each proposal against a rubric:
+
+- Directional correctness (0/1/2): does the proposal actually move in the direction implied by the directive?
+- Magnitude sensibility (0/1/2): is the adjustment size reasonable — not overly aggressive, not trivially conservative?
+- Grounding in current state (0/1/2): is the proposal based on the actual current portfolio retrieved from the Data Agent, or does it ignore reality?
+- Reasoning quality (0/1/2): does the agent's chain-of-thought show meaningful understanding of the product line, or is it boilerplate?
+
+The judge must produce a written rationale alongside the score. Rationales let us spot-check whether the judge is behaving sensibly.
+
+The critical enabler for Layer 2 is a curated set of 15–20 golden scenarios. Each scenario pairs a directive and a current-portfolio state with a reference "good proposal" written by an ALM domain expert. The reference proposal does not need to be precise — directional sketches with approximate magnitudes are enough. Judges score much more reliably when comparing a proposal to a reference than when grading in absolute terms.
+
+Layer 3 — Domain Expert Review (manual, small sample)
+
+LLM judges remain unreliable on deep domain knowledge. The final layer is review by an ALM team member who understands FD, loan, and CASA structures in production. This review happens on a small sample (5–10 cases per major eval run), not every commit. Experts give a simple verdict (approve / revise / reject) and a short rationale, and their feedback is folded back into the golden scenarios and the LLM-judge rubric.
+
+This layer is for calibration of the other two layers, not for daily regression testing.
+
+Scenario Dataset Construction
+
+For MVP we target roughly 20 evaluation scenarios per proposer, constructed as a matrix across three dimensions: rate trajectory (up / down / flat), current portfolio shape (short-heavy / long-heavy / balanced), and constraint tightness (loose / tight). Each scenario includes a synthetic directive, a current-state snapshot, and a reference proposal from an ALM expert. 20 well-constructed scenarios are more valuable than 200 generic ones — the same philosophy that guided the ALCO Agent eval dataset.
+
+=====================================================================
+
+BSO Evaluation
+
+The BSO is evaluated on three distinct dimensions.
+
+Routing Correctness
+
+The BSO's routing decisions form a trajectory: which nodes it visits, in what order, and under what conditions. We evaluate this as a trajectory-matching problem:
+
+- Define 10–20 scenarios with expected trajectories. For example, for a scenario where all three proposers return reasonable proposals, the expected trajectory is: plan → dispatch(FD, Loan, CASA) → wait for all → optimize → evaluate → END (approved).
+- Run the BSO and record the actual trajectory of node visits.
+- Compare actual vs expected, allowing flexibility where order does not matter (e.g. the three proposers can be dispatched in any order).
+
+This is fully automated and catches major workflow bugs quickly.
+
+Sub-task Decomposition Quality
+
+When the BSO receives a macro strategy, it decomposes it into three sub-directives — one per proposer. The quality of this decomposition is judged by an LLM-as-judge on three axes:
+
+- Consistency: do the three sub-directives point in mutually compatible directions (e.g. the FD and Loan directives should not contradict each other in a falling-rate environment)?
+- Completeness: are all relevant product lines addressed?
+- Actionability: are the sub-directives specific enough for a proposer to execute, rather than restatements of the macro strategy?
+
+End-to-End Outcome
+
+This is the most important dimension. After the full workflow runs, we measure:
+
+- Pass rate: the percentage of runs that produce a plan clearing the evaluate step (no infinite re-dispatch loops, no giving up).
+- NIM improvement: the delta in projected NIM between the approved plan and the current baseline. This is a hard quantitative metric because the Analytics Agent computes both numbers deterministically.
+- Constraint violation rate: the percentage of final plans that violate at least one boundary condition.
+- Domain expert verdict on a sampled subset of approved plans.
+
+The NIM improvement metric is what ultimately justifies the system's existence, so we track it carefully across eval runs.
+
+=====================================================================
+
+Recommended Build Order
+
+Evaluation infrastructure should be built alongside the agents, not after. We recommend the following order of construction, prioritizing the checks that catch the broadest class of failures first:
+
+- Start with tool evals and BSO trajectory evals. Both are fully automated and catch the "does the system run at all" class of bugs. These give the fastest feedback loop.
+- Next, add proposer Layer 1 (hard rules). These are also automated and prevent mechanical regressions from slipping through when prompts or models change.
+- Then build proposer Layer 2 (LLM-as-judge) together with the golden scenarios. This step requires collaboration with ALM domain experts to co-author scenarios and reference proposals, so it naturally takes longer than the earlier layers.
+- Layer 3 expert review is an ongoing activity. We engage domain experts whenever a model is swapped, a prompt is substantially rewritten, or before any major release.
+
+The key principle is to get the eval scaffold running end-to-end on the BSO plus a single proposer (for example, FD) before expanding coverage to the other proposers. Without this, prompt changes produce unknown deltas and tuning becomes blind.
+
+=====================================================================
+
+Important Considerations
+
+A few points that apply across all three evaluation categories.
+
+LLM judges have bias and domain blind spots. An Opus-level judge may not intuit whether a 20% tenor shift is aggressive in a banking context. We mitigate this by giving judges a domain-specific rubric authored by an ALM expert, and by framing the judge's task as a comparison against a reference proposal rather than absolute scoring. Comparison tasks are empirically easier for LLM judges.
+
+Keep deterministic checks out of the LLM judge. The "is the new plan more profitable than the baseline" check is pure arithmetic done by the Analytics Agent. This is a hard pass/fail gate, not a dimension for LLM scoring. Mixing deterministic and judgment-based criteria in the same rubric confuses both the judge and the reader of the eval report.
+
+Include negative tests. Happy-path evaluation is not enough. We need to test how each component handles degenerate inputs: a BSO receiving a self-contradictory macro strategy, a proposer receiving a physically impossible directive, a Data Agent returning empty results. How the system fails under these conditions matters more in production than how it performs on clean cases.
